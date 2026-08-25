@@ -5,48 +5,54 @@ cross-cutting list of improvements layered on top of it — things worth doing t
 inkboard faster, safer, more useful, and nicer to use, roughly ordered by impact vs. effort.
 Kevin picks what to build next; nothing here is committed to a milestone.
 
-Grounded in the actual current state (not aspirational):
-- The client bundle is 1.95MB (599KB gzipped) — Vite's own build output flags this.
-- No automated tests exist anywhere. Every bug found so far (the upload route's 415 on real
-  video blobs, a malformed-but-signed pairing token crashing request handling, two CI
-  misconfigurations) was caught by hand during manual stress-testing, not by anything that
-  runs automatically on the next change.
-- The UI is bare default tldraw. The original spec described a purpose-built, boring
-  toolbar with a pre-flight checklist (Pencil ready / camera detected / mic level / disk
-  space / server connected) gating "REC" — never built.
-- The security baseline covers secrets/transport/pairing but has no rate limiting, no
-  security headers, and pairing tokens are reusable within their 5-minute TTL (not
-  single-use).
+Grounded in the actual current state:
+- **Done, this pass:** all five "Now" items below — tests, rate limiting, helmet, single-use
+  pairing tokens, bundle splitting, deferred tldraw load, and the real toolbar/checklist.
+  Verified live: `pnpm typecheck && pnpm lint && pnpm test && pnpm build` all pass, plus a
+  running-server smoke test (helmet headers present, single-use token confirmed via a real
+  double-pair attempt, rate limit confirmed by tripping 429 at the 5th `/api/pair` call).
+- Remaining gaps: real M1 WebRTC capture doesn't exist yet, so the checklist's "server
+  connected" only proves the signaling WS is reachable, not that live capture works. The
+  toolbar's page-cycling and REC gating haven't been used on real iPad hardware yet — see
+  "Verify on hardware" below.
 
-## Now — high impact, low-to-medium effort
+## Now — done this pass
 
-**Testing** (the biggest gap — every bug found this session was manual)
-- Add Vitest to `packages/shared-schema` and `apps/server`: unit tests for
-  `verifyPairingToken`/`generatePairingToken` (valid, expired, tampered, malformed-payload —
-  literally the bugs found by hand this session) and for the upload route's session-id/
-  path-traversal guard. Wire into `ci.yml`.
+**Testing** ✅ — `apps/server` has Vitest (`pnpm test`, wired into `ci.yml`): unit tests for
+`verifyPairingToken`/`generatePairingToken`/`consumePairingNonce` (valid, expired, tampered,
+malformed-payload, single-use replay — the exact bugs found by hand last session) and for the
+upload route's auth/session-id/path-traversal guard (via Fastify's `.inject()`, no real
+server needed). 15 tests, all passing.
 
-**Security**
-- [`@fastify/rate-limit`](https://github.com/fastify/fastify-rate-limit) on `/api/pair` —
-  nothing currently stops brute-force guessing against the pairing endpoint.
-- [`@fastify/helmet`](https://github.com/fastify/fastify-helmet) for baseline security
-  headers (CSP, no-sniff, etc.) on the served PWA.
-- Make pairing tokens single-use: track consumed nonces in a small in-memory Set with TTL
-  eviction, so a token can't be replayed even inside its 5-minute window.
+**Security** ✅
+- `@fastify/rate-limit`: 5/min on `/api/pair` (confirmed live — 429 after 5 calls), 200/min
+  global default elsewhere.
+- `@fastify/helmet`: CSP + standard hardening headers on every response (confirmed live).
+- Pairing tokens are now single-use for the *handshake* specifically (`consumePairingNonce`,
+  an in-memory nonce set with TTL eviction) — a captured token can't re-run `/api/pair`. The
+  same token still works as the bearer credential for uploads/signaling afterward, since it
+  doubles as the M0 session credential (confirmed live: pair once, second pair attempt 401s,
+  upload with the same token still 200s).
 
-**Performance**
-- Fix the 1.95MB bundle: `manualChunks` in `apps/client/vite.config.ts` to split `tldraw`
-  and `katex` into their own vendor chunks, and lazy-load KaTeX inside `MathShapeUtil` (only
-  paid for when a Math object actually exists on the board).
-- Defer loading the tldraw editor bundle until *after* the pairing gate passes — right now
-  the whole editor ships to an unpaired device before it's even allowed in.
+**Performance** ✅ — `manualChunks` splits `tldraw` (1.68MB) and `katex` (261KB) into their
+own vendor chunks; KaTeX is dynamic-`import()`ed inside `MathShapeUtil` (only loaded once a
+Math object renders); `BoardCanvas` (and therefore all of tldraw) is `React.lazy`-loaded
+inside `<PairingGate>`, so an unpaired device's initial JS is ~7KB instead of the full
+bundle. Confirmed via `pnpm build` chunk output.
 
-**UI/UX**
-- Build the originally-envisioned purpose-built toolbar in place of bare default tldraw UI:
-  Pen / Eraser / Undo / Redo / Page / **REC**, plus the pre-flight checklist (✓ Pencil ready,
-  ✓ Camera detected, ✓ Mic level moving, ✓ Server connected, ✓ Disk space) that disables REC
-  until everything is green. This is the single biggest polish gap between "PoC" and
-  "something pleasant to actually use."
+**UI/UX** ✅ — `AppToolbar.tsx` replaces default tldraw chrome (`MainMenu`/`StylePanel`/
+`PageMenu` hidden) with Pen/Eraser/Text/Math/Arrow/Shape/Undo/Redo/Page/**REC**, plus the
+literal pre-flight checklist from the original spec (✓ Pencil ready — first `pointerType:
+"pen"` event seen, ✓ Camera detected, ✓ Mic level moving — RMS-over-threshold via
+AnalyserNode, ✓ Server connected — signaling WS handshake, ✓ Disk space —
+`navigator.storage.estimate()`), all five gating REC. `useRecordingRig` owns the single
+`getUserMedia` call (previously acquired independently by `CameraPreview`, a latent bug that
+would have caused duplicate permission prompts).
+
+**Not yet done — verify on hardware**: none of this pass's UI/preflight logic has run on a
+real iPad + Apple Pencil yet, only in this dev environment. Pencil detection in particular
+(`pointerType === "pen"`) needs confirming against real Safari/iPadOS behavior before relying
+on it.
 
 ## Next — real value, medium effort (natural follow-ons to M1/M2)
 

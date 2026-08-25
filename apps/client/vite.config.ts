@@ -28,4 +28,18 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // tldraw and katex are by far the two largest dependencies and
+        // change far less often than app code — splitting them into their
+        // own vendor chunks lets the browser cache them across app deploys
+        // instead of re-downloading everything on every build.
+        manualChunks: {
+          tldraw: ["tldraw"],
+          katex: ["katex"],
+        },
+      },
+    },
+  },
 });

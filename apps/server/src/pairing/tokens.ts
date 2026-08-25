@@ -13,6 +13,20 @@ export interface PairingToken {
   issuedAt: number;
 }
 
+// Nonces consumed by the /api/pair handshake, so a captured token can't be
+// replayed to re-run pairing even inside its TTL. Not checked by
+// verifyPairingToken() itself, since the same token doubles as the bearer
+// credential for uploads/signaling for the rest of the M0 session — see
+// pairingRoutes.ts. Evicted lazily on the token's own TTL so this can't grow
+// without bound.
+const consumedNonces = new Map<string, number>();
+
+function evictExpiredNonces(now: number): void {
+  for (const [nonce, expiresAt] of consumedNonces) {
+    if (expiresAt <= now) consumedNonces.delete(nonce);
+  }
+}
+
 function getSecret(): string {
   const secret = process.env.PAIRING_TOKEN_SECRET;
   if (!secret || secret.startsWith("replace-me")) {
@@ -63,4 +77,25 @@ export function verifyPairingToken(token: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Marks a token's nonce as used for the pairing handshake specifically.
+ * Returns false if the token is invalid/expired, or if this exact nonce has
+ * already completed pairing once. Call only from POST /api/pair.
+ */
+export function consumePairingNonce(token: string): boolean {
+  if (!verifyPairingToken(token)) return false;
+
+  const payloadB64 = token.split(".")[0] ?? "";
+  const decoded: PairingToken = JSON.parse(
+    Buffer.from(payloadB64, "base64url").toString(),
+  );
+
+  const now = Date.now();
+  evictExpiredNonces(now);
+
+  if (consumedNonces.has(decoded.nonce)) return false;
+  consumedNonces.set(decoded.nonce, decoded.issuedAt + TOKEN_TTL_MS);
+  return true;
 }

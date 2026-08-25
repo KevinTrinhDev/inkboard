@@ -1,6 +1,13 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 const STORAGE_KEY = "inkboard.pairingToken";
+
+const PairingTokenContext = createContext<string | null>(null);
+
+/** The paired credential, available to anything rendered inside <PairingGate>. */
+export function usePairingToken(): string | null {
+  return useContext(PairingTokenContext);
+}
 
 function getStoredToken(): string | null {
   try {
@@ -57,5 +64,7 @@ export function PairingGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <PairingTokenContext.Provider value={token}>{children}</PairingTokenContext.Provider>
+  );
 }

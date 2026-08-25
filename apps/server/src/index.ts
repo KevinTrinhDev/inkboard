@@ -2,6 +2,8 @@ import "dotenv/config";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import Fastify from "fastify";
+import fastifyHelmet from "@fastify/helmet";
+import fastifyRateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import { pairingRoutes } from "./pairing/pairingRoutes.js";
@@ -16,6 +18,23 @@ const domain = process.env.CADDY_DOMAIN ?? "inkboard.local";
 
 async function main() {
   const app = Fastify({ logger: true });
+
+  // Global default is generous — this is a LAN personal server, not a public
+  // API — the meaningful limit is the tighter per-route one on /api/pair.
+  await app.register(fastifyRateLimit, { max: 200, timeWindow: "1 minute" });
+
+  await app.register(fastifyHelmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        // tldraw and KaTeX both set inline element styles at runtime.
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        mediaSrc: ["'self'", "blob:"],
+        connectSrc: ["'self'", "ws:", "wss:"],
+      },
+    },
+  });
 
   await app.register(fastifyWebsocket);
   await app.register(fastifyStatic, {

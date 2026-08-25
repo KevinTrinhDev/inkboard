@@ -1,11 +1,41 @@
+import { useEffect, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, T, type RecordProps, type TLBaseShape } from "tldraw";
-import katex from "katex";
-import "katex/dist/katex.min.css";
 
 export type MathShape = TLBaseShape<
   "inkboard-math",
   { w: number; h: number; latex: string }
 >;
+
+// KaTeX (and its CSS) is only paid for once a Math object actually exists on
+// the board, not on every page load — dynamic import, cached after first use.
+let katexModulePromise: Promise<typeof import("katex")> | null = null;
+function loadKatex() {
+  katexModulePromise ??= import("katex").then(async (mod) => {
+    await import("katex/dist/katex.min.css");
+    return mod;
+  });
+  return katexModulePromise;
+}
+
+function MathRenderer({ latex }: { latex: string }) {
+  const [html, setHtml] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadKatex().then(({ default: katex }) => {
+      if (cancelled) return;
+      setHtml(katex.renderToString(latex, { throwOnError: false }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [latex]);
+
+  if (html === null) {
+    return <span style={{ opacity: 0.5, fontFamily: "monospace" }}>{latex}</span>;
+  }
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+}
 
 /**
  * Renders a hardcoded LaTeX string via KaTeX to prove the rendering path —
@@ -25,12 +55,9 @@ export class MathShapeUtil extends BaseBoxShapeUtil<MathShape> {
   }
 
   component(shape: MathShape) {
-    const html = katex.renderToString(shape.props.latex, {
-      throwOnError: false,
-    });
     return (
       <HTMLContainer style={{ padding: 4 }}>
-        <span dangerouslySetInnerHTML={{ __html: html }} />
+        <MathRenderer latex={shape.props.latex} />
       </HTMLContainer>
     );
   }

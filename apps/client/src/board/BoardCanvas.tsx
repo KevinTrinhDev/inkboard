@@ -5,6 +5,7 @@ import { MathShapeUtil } from "./shapes/MathShapeUtil";
 import { ArrowShapeUtil } from "./shapes/ArrowShapeUtil";
 import { RoughShapeUtil } from "./shapes/RoughShapeUtil";
 import { createShapeTool } from "./tools/createShapeTool";
+import { AppToolbar } from "./AppToolbar";
 
 // Ink strokes use tldraw's native `draw` shape/tool directly — that's the
 // path that has to feel instant under an Apple Pencil, so it deliberately
@@ -19,9 +20,12 @@ const tools = [
 ];
 
 const components: TLComponents = {
-  // Default tldraw UI is enough for the M0 proof-of-concept; a boring,
-  // purpose-built toolbar (pen/eraser/undo/redo/page/record) is a later
-  // polish pass, not part of this scaffold.
+  Toolbar: AppToolbar,
+  // The default menu/style-panel chrome doesn't fit a purpose-built,
+  // boring recording tool — replaced entirely by AppToolbar above.
+  MainMenu: null,
+  StylePanel: null,
+  PageMenu: null,
 };
 
 export function BoardCanvas() {

@@ -12,6 +12,7 @@
     "build": "pnpm -r run build",
     "typecheck": "pnpm --filter @inkboard/shared-schema run build && pnpm -r run typecheck",
     "lint": "eslint .",
+    "test": "pnpm --filter @inkboard/server run test",
     "dev:server": "pnpm --filter @inkboard/server dev",
     "dev:client": "pnpm --filter @inkboard/client dev",
     "prepare": "husky"

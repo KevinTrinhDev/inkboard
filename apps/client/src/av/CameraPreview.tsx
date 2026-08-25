@@ -1,34 +1,23 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 /**
- * getUserMedia preview. Proves camera/mic permission works inside the
- * *installed* PWA context, not just a Safari tab — iOS treats persisted
- * permissions differently between the two. See docs/ARCHITECTURE.md.
+ * Renders a live preview of an already-acquired stream. The stream itself is
+ * owned by useRecordingRig (a single getUserMedia call feeds both this
+ * preview and the preflight checklist's camera/mic checks) — see
+ * docs/ARCHITECTURE.md.
  */
 export function CameraPreview({
-  onStream,
+  stream,
+  error,
 }: {
-  onStream?: (stream: MediaStream) => void;
+  stream: MediaStream | null;
+  error: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let stream: MediaStream | undefined;
-
-    navigator.mediaDevices
-      .getUserMedia({ video: true, audio: true })
-      .then((s) => {
-        stream = s;
-        if (videoRef.current) videoRef.current.srcObject = s;
-        onStream?.(s);
-      })
-      .catch((err) => setError(String(err)));
-
-    return () => {
-      stream?.getTracks().forEach((track) => track.stop());
-    };
-  }, [onStream]);
+    if (videoRef.current) videoRef.current.srcObject = stream;
+  }, [stream]);
 
   if (error) {
     return (
