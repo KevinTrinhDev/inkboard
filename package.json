@@ -10,7 +10,7 @@
   "packageManager": "pnpm@11.23.0",
   "scripts": {
     "build": "pnpm -r run build",
-    "typecheck": "pnpm -r run typecheck",
+    "typecheck": "pnpm --filter @inkboard/shared-schema run build && pnpm -r run typecheck",
     "lint": "eslint .",
     "dev:server": "pnpm --filter @inkboard/server dev",
     "dev:client": "pnpm --filter @inkboard/client dev",
