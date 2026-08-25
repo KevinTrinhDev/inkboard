@@ -1,0 +1,9 @@
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact -v
+else
+  echo "WARNING: gitleaks not installed locally — skipping local secret scan." >&2
+  echo "Install it (https://github.com/gitleaks/gitleaks#installing) so this" >&2
+  echo "catches secrets before CI does. CI's gitleaks.yml still runs regardless." >&2
+fi
+
+pnpm exec lint-staged

@@ -1,0 +1,14 @@
+title = "inkboard gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known non-secret placeholders"
+regexes = [
+  '''replace-me-with-a-random-64-char-hex-string''',
+  '''PAIRING_TOKEN_SECRET=.*example.*''',
+]
+paths = [
+  '''\.env\.example$''',
+]

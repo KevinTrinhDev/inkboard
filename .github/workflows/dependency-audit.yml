@@ -1,0 +1,26 @@
+name: dependency-audit
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      # Non-blocking for now — audit findings are surfaced, not enforced,
+      # until the dependency tree has a clean baseline. See docs/SECURITY.md.
+      - run: pnpm audit || true

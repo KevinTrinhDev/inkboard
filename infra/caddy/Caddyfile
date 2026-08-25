@@ -1,0 +1,19 @@
+# Local-only reverse proxy for inkboard. Uses Caddy's built-in local CA
+# (`tls internal`) so the iPad gets a secure context (required for
+# getUserMedia) without a public domain or Let's Encrypt. See
+# infra/caddy/README.md and docs/SECURITY.md for the trust flow.
+#
+# {$CADDY_DOMAIN} defaults to inkboard.local (set in .env / exported before
+# running Caddy). Requires mDNS (Avahi, ships with Ubuntu) to resolve on the
+# LAN, or a static /etc/hosts entry on client devices that don't support it.
+
+{$CADDY_DOMAIN:inkboard.local} {
+	tls internal
+
+	reverse_proxy 127.0.0.1:{$SERVER_PORT:8080}
+
+	# Firm ceiling; recordings are uploaded once on stop (M0), not streamed.
+	request_body {
+		max_size 2GB
+	}
+}

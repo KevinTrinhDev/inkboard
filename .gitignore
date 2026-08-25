@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.*.local
+*.pem
+*.key
+*.crt
+!infra/caddy/*.example.crt
+
+# caddy local CA (never commit private key material)
+infra/caddy/data/
+infra/caddy/config/
+
+# recordings / uploads
+apps/server/recordings/
+apps/server/uploads/
+
+# python
+services/*/__pycache__/
+services/*/venv/
+services/*/.venv/
+services/*/*.egg-info/
+
+# editors / os
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
