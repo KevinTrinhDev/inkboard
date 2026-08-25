@@ -8,7 +8,9 @@ export time.
 
 > **Status:** early-stage personal project, private repo. This README covers
 > the M0 scaffold + proof-of-concept milestone — see
-> [docs/ROADMAP.md](docs/ROADMAP.md) for what's next.
+> [docs/ROADMAP.md](docs/ROADMAP.md) for what's next, or
+> [docs/BACKLOG.md](docs/BACKLOG.md) for the prioritized list of performance/
+> security/UI-UX/use-case improvements on top of it.
 
 ## Why semantic, not pixels
 
@@ -82,7 +84,7 @@ Full detail: [docs/SECURITY.md](docs/SECURITY.md) (pairing/trust model) and
 - `infra/` — Caddy config, firewall setup, dev scripts.
 - `docs/` — [ARCHITECTURE.md](docs/ARCHITECTURE.md),
   [SECURITY.md](docs/SECURITY.md), [API.md](docs/API.md),
-  [ROADMAP.md](docs/ROADMAP.md).
+  [ROADMAP.md](docs/ROADMAP.md), [BACKLOG.md](docs/BACKLOG.md).
 
 ## License
 

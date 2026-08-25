@@ -1,5 +1,9 @@
 # Roadmap
 
+This is the sequential build plan. For cross-cutting improvements (performance, security,
+UI/UX, additional use cases) layered on top of these milestones, see
+[BACKLOG.md](./BACKLOG.md).
+
 ## M0 — Scaffold + proof of concept (this pass)
 - Repo structure, docs, CI/security baseline (gitleaks, pre-commit, dependency audit).
 - Secure LAN HTTPS from the XPS reaches the iPad as an installable PWA (Caddy
