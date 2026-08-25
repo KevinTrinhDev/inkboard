@@ -48,8 +48,19 @@ export function verifyPairingToken(token: string): boolean {
   if (expectedBuf.length !== actualBuf.length) return false;
   if (!timingSafeEqual(expectedBuf, actualBuf)) return false;
 
-  const decoded: PairingToken = JSON.parse(
-    Buffer.from(payloadB64, "base64url").toString(),
-  );
-  return Date.now() - decoded.issuedAt <= TOKEN_TTL_MS;
+  // The signature check above already proves this payload was produced by
+  // generatePairingToken() for any input we issued — but a byte-identical
+  // signature isn't guaranteed for arbitrary attacker input, so decoding
+  // still must not be allowed to throw and take the process down with it.
+  try {
+    const decoded: PairingToken = JSON.parse(
+      Buffer.from(payloadB64, "base64url").toString(),
+    );
+    return (
+      typeof decoded.issuedAt === "number" &&
+      Date.now() - decoded.issuedAt <= TOKEN_TTL_MS
+    );
+  } catch {
+    return false;
+  }
 }

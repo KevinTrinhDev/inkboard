@@ -14,6 +14,14 @@ export async function registerUploadRoute(app: FastifyInstance) {
   const recordingsDir = resolve(process.env.RECORDINGS_DIR ?? "./recordings");
   await mkdir(recordingsDir, { recursive: true });
 
+  // MediaRecorder blobs arrive as video/webm (or similar), not JSON/text —
+  // Fastify 415s any content-type it has no parser for by default. This
+  // passes the raw stream through untouched so the handler can pipe
+  // `request.raw` itself instead of Fastify buffering it into request.body.
+  app.addContentTypeParser("*", (_request, payload, done) => {
+    done(null, payload);
+  });
+
   app.post("/api/sessions/:id/upload", async (request, reply) => {
     const token = (request.headers["x-pairing-token"] as string) ?? "";
     if (!verifyPairingToken(token)) {

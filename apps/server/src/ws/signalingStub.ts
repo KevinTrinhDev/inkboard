@@ -18,7 +18,7 @@ export async function registerSignalingStub(app: FastifyInstance) {
     app.log.info("client connected to signaling stub");
 
     socket.on("message", (raw: Buffer) => {
-      app.log.info({ msg: raw.toString() }, "signaling message received");
+      app.log.info({ payload: raw.toString() }, "signaling message received");
     });
 
     socket.on("close", () => {
