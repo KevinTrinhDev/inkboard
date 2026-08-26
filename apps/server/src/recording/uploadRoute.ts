@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { FastifyInstance } from "fastify";
-import { verifyPairingToken } from "../pairing/tokens.js";
+import { verifySessionCredential } from "../pairing/tokens.js";
 
 /**
  * M0 stand-in for live capture: the client records locally via
@@ -24,8 +24,8 @@ export async function registerUploadRoute(app: FastifyInstance) {
 
   app.post("/api/sessions/:id/upload", async (request, reply) => {
     const token = (request.headers["x-pairing-token"] as string) ?? "";
-    if (!verifyPairingToken(token)) {
-      return reply.code(401).send({ error: "invalid or expired pairing token" });
+    if (!verifySessionCredential(token)) {
+      return reply.code(401).send({ error: "invalid or expired session credential" });
     }
 
     const { id } = request.params as { id: string };
@@ -35,7 +35,11 @@ export async function registerUploadRoute(app: FastifyInstance) {
       return reply.code(400).send({ error: "invalid session id" });
     }
 
-    const filePath = join(recordingsDir, `${id}.webm`);
+    // Bodies arrive pre-encrypted client-side (AES-256-GCM, IV prepended) —
+    // this server never holds the key, so `.enc` reflects what's actually on
+    // disk: ciphertext, not a playable video file. See docs/SECURITY.md
+    // "Encryption at rest".
+    const filePath = join(recordingsDir, `${id}.webm.enc`);
     if (!filePath.startsWith(recordingsDir + sep)) {
       return reply.code(400).send({ error: "invalid session id" });
     }

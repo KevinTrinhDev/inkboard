@@ -45,6 +45,57 @@ inbound port forwarding.
   — generate a real value with `openssl rand -hex 32` and never commit it.
 - A device that doesn't present a valid token cannot open the board, connect
   to the signaling WebSocket, or upload/read session data.
+- Pairing (`POST /api/pair`) is separate from the credential used afterward:
+  the scanned QR token is short-lived (5 minutes, single-use for pairing
+  itself) but the credential it exchanges for is a distinct, longer-lived
+  (30 day) session credential, signed with a domain-separated HMAC so
+  neither can be replayed as the other. This split exists specifically so an
+  offline recording session (see below) can still authenticate an upload
+  hours or days later without forcing a re-pair.
+
+## Offline recording
+
+inkboard is offline-first: recording never depends on the signaling
+WebSocket or any network reachability, only on local device storage.
+
+- Pencil/camera/mic/disk are the only pre-flight gates on REC.
+  `serverConnected` is shown in the UI but is informational only — dropping
+  Wi-Fi mid-lesson does not stop or block a recording.
+- A finished take is encrypted on-device (see "Encryption at rest" below)
+  and written to the iPad's IndexedDB immediately, before any network
+  attempt. It only ever leaves the device once a connection to the XPS
+  actually exists.
+- A background sync loop retries every 15 seconds and on the browser's
+  `online` event, uploading anything still queued. The toolbar shows a
+  "waiting to sync" count so the operator knows what hasn't reached the
+  server yet.
+- True Bluetooth/no-network live transport isn't possible for this use case
+  — a camera feed needs far more bandwidth than Bluetooth (Classic or BLE)
+  provides. Offline-first record-then-sync is the correct shape for "works
+  without Wi-Fi": you're never blocked by the network being down, only
+  delayed on when the recording reaches the XPS.
+
+## Encryption at rest
+
+Recordings are encrypted client-side before they are ever written to disk
+anywhere, including the iPad's own local queue:
+
+- A random AES-256-GCM key is generated on first use via the Web Crypto API
+  and stored only in that device's IndexedDB. It is never transmitted to the
+  server or included in any network request, in any form.
+- Each recording is encrypted with a fresh random IV (prepended to the
+  ciphertext) before being queued locally and before upload. The XPS stores
+  the resulting `.webm.enc` file exactly as received — it never possesses
+  the key and cannot decrypt it.
+- Practical effect: someone with access to the XPS (theft, another local
+  user, a backup that leaks) gets only ciphertext. Only the iPad that
+  recorded a given session can decrypt it.
+- Trade-off, stated plainly: this key has no recovery mechanism by design.
+  If the iPad resets, its browser storage is cleared, or the device is
+  lost, every recording encrypted with that key becomes permanently
+  unreadable — there is no backdoor and no export of the key today. A
+  future milestone could add an explicit "export/back up this key" flow if
+  that trade-off turns out to be wrong in practice; nothing does that today.
 
 ## Secret handling
 

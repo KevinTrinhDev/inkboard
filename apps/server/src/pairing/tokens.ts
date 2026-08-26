@@ -7,9 +7,18 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
  */
 
 const TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes to scan the QR
+// Long enough that a fully offline recording session (no Wi-Fi at all until
+// the operator is back near the server) can still sync afterward without
+// re-pairing. See docs/SECURITY.md "Offline recording".
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export interface PairingToken {
   nonce: string;
+  issuedAt: number;
+}
+
+export interface SessionCredential {
+  sessionNonce: string;
   issuedAt: number;
 }
 
@@ -39,6 +48,13 @@ function getSecret(): string {
 
 function sign(payload: string): string {
   return createHmac("sha256", getSecret()).update(payload).digest("hex");
+}
+
+// Session credentials are signed with a `session.` domain prefix so a valid
+// session credential's signature can never be replayed as a valid pairing
+// token (or vice versa) even though both use the same secret.
+function signSession(payloadB64: string): string {
+  return sign(`session.${payloadB64}`);
 }
 
 export function generatePairingToken(): string {
@@ -73,6 +89,46 @@ export function verifyPairingToken(token: string): boolean {
     return (
       typeof decoded.issuedAt === "number" &&
       Date.now() - decoded.issuedAt <= TOKEN_TTL_MS
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Long-lived (30 day) credential issued once at pairing time. Unlike the
+ * short-lived pairing token, this is what the client actually uses as its
+ * bearer credential for uploads/signaling afterward — a 5-minute TTL was too
+ * short to survive a fully offline recording session (see
+ * docs/SECURITY.md "Offline recording"), so pairing no longer hands back the
+ * pairing token itself as the credential.
+ */
+export function generateSessionCredential(): string {
+  const credential: SessionCredential = {
+    sessionNonce: randomBytes(16).toString("hex"),
+    issuedAt: Date.now(),
+  };
+  const payloadB64 = Buffer.from(JSON.stringify(credential)).toString("base64url");
+  const signature = signSession(payloadB64);
+  return `session.${payloadB64}.${signature}`;
+}
+
+export function verifySessionCredential(token: string): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== "session") return false;
+  const [, payloadB64, signature] = parts;
+  if (!payloadB64 || !signature) return false;
+
+  const expected = signSession(payloadB64);
+  const expectedBuf = Buffer.from(expected, "hex");
+  const actualBuf = Buffer.from(signature, "hex");
+  if (expectedBuf.length !== actualBuf.length) return false;
+  if (!timingSafeEqual(expectedBuf, actualBuf)) return false;
+
+  try {
+    const decoded: SessionCredential = JSON.parse(Buffer.from(payloadB64, "base64url").toString());
+    return (
+      typeof decoded.issuedAt === "number" && Date.now() - decoded.issuedAt <= SESSION_TTL_MS
     );
   } catch {
     return false;

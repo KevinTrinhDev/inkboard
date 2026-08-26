@@ -65,7 +65,7 @@ export function AppToolbar() {
           borderRadius: 10,
         }}
       >
-        <PreflightChecklist preflight={rig.preflight} />
+        <PreflightChecklist preflight={rig.preflight} pendingSyncCount={rig.pendingSyncCount} />
       </div>
 
       <div
