@@ -25,6 +25,13 @@ inbound port forwarding.
 - The server's LAN hostname is an mDNS `.local` name (via Avahi, which ships
   with Ubuntu) rather than a raw DHCP IP, so the trusted cert and the PWA's
   "Add to Home Screen" bookmark keep working if the device's IP changes.
+  Note: this requires actually configuring the alias (e.g. via
+  `/etc/avahi/hosts`) — Avahi only publishes the machine's real hostname by
+  default, not an arbitrary name like `inkboard.local`.
+- The Fastify process itself binds to `127.0.0.1` only, never `0.0.0.0`.
+  Caddy (the only intended entry point) reaches it over loopback via
+  `reverse_proxy 127.0.0.1:<port>`; nothing on the LAN can hit the app port
+  directly and bypass TLS.
 
 ## Network access control
 
