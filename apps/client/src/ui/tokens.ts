@@ -30,6 +30,11 @@ export const text = {
 
 export const accent = {
   active: "rgba(255, 255, 255, 0.14)",
+  // A visible ring, not just a background tint, on the active tool button.
+  // A 14% white overlay alone is too subtle to reliably read at a glance in
+  // bright light (found from real hardware feedback) — the ring makes the
+  // active state unambiguous regardless of ambient lighting.
+  activeRing: "#5b8dff",
   record: "#ef4444",
 } as const;
 

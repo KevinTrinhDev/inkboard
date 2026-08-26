@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 const STORAGE_KEY = "inkboard.pairingToken";
 
@@ -67,14 +75,22 @@ export function PairingGate({ children }: { children: ReactNode }) {
       });
   }, [token]);
 
-  function forgetToken() {
+  const forgetToken = useCallback(() => {
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
       // Best effort, still clear the in-memory token below either way.
     }
     setToken(null);
-  }
+  }, []);
+
+  // Stable reference across renders unless token actually changes: without
+  // this, a new object here on every render would flow through context to
+  // useRecordingRig's effects (the signaling socket, the sync loop), whose
+  // dependency arrays include this callback, and could cause them to tear
+  // down and reconnect on every unrelated re-render instead of only when
+  // pairing state actually changes.
+  const contextValue = useMemo(() => ({ token, forgetToken }), [token, forgetToken]);
 
   if (!token) {
     return (
@@ -90,8 +106,6 @@ export function PairingGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <PairingTokenContext.Provider value={{ token, forgetToken }}>
-      {children}
-    </PairingTokenContext.Provider>
+    <PairingTokenContext.Provider value={contextValue}>{children}</PairingTokenContext.Provider>
   );
 }

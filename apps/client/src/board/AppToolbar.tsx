@@ -37,10 +37,12 @@ const iconButtonStyle = (active = false): React.CSSProperties => ({
   justifyContent: "center",
   background: active ? accent.active : "transparent",
   color: active ? text.active : text.muted,
-  border: "none",
+  // A real border, not just a background tint, so the active tool is
+  // unmistakable in bright light, not just a subtle 14% overlay.
+  border: active ? `1.5px solid ${accent.activeRing}` : "1.5px solid transparent",
   borderRadius: 10,
   cursor: "pointer",
-  transition: "background 0.12s ease, color 0.12s ease",
+  transition: "background 0.12s ease, color 0.12s ease, border-color 0.12s ease",
   // This toolbar renders inside tldraw's own component tree, which sits
   // inside BoardCanvas's touch-action:none drawing surface. Without this,
   // WebKit's documented touch-action:none-suppresses-tap quirk can make
