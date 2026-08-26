@@ -1,12 +1,13 @@
 import { createContext, useContext, type ReactNode } from "react";
-import { usePairingToken } from "../pairing/PairingGate";
+import { useForgetPairingToken, usePairingToken } from "../pairing/PairingGate";
 import { useRecordingRig, type RecordingRig } from "./useRecordingRig";
 
 const RecordingContext = createContext<RecordingRig | null>(null);
 
 export function RecordingProvider({ children }: { children: ReactNode }) {
   const token = usePairingToken();
-  const rig = useRecordingRig(token);
+  const forgetToken = useForgetPairingToken();
+  const rig = useRecordingRig(token, forgetToken);
   return <RecordingContext.Provider value={rig}>{children}</RecordingContext.Provider>;
 }
 

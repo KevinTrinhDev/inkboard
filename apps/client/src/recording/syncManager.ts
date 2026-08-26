@@ -12,6 +12,7 @@ const RETRY_INTERVAL_MS = 15_000;
 export function startSyncLoop(
   getToken: () => string | null,
   onQueueChange: (pendingCount: number) => void,
+  onCredentialInvalid: () => void = () => {},
 ): { flushNow: () => void; stop: () => void } {
   let flushing = false;
 
@@ -35,8 +36,10 @@ export function startSyncLoop(
           if (res.ok) {
             await removeQueuedUpload(item.sessionId);
           } else if (res.status === 401) {
-            // Credential expired/invalid: nothing more we can do until
-            // re-pairing; stop trying this pass rather than spin on it.
+            // Credential expired/invalid: bounce back to the pairing
+            // screen immediately rather than silently leaving the take
+            // queued forever with no indication anything is wrong.
+            onCredentialInvalid();
             break;
           }
           // Any other non-OK status: leave it queued, retry next pass.

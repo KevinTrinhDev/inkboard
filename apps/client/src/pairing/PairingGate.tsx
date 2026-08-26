@@ -2,11 +2,27 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 
 const STORAGE_KEY = "inkboard.pairingToken";
 
-const PairingTokenContext = createContext<string | null>(null);
+interface PairingContextValue {
+  token: string | null;
+  // Called when the stored credential is discovered to be dead (a 401 on an
+  // API call, or the signaling socket closing 4401): drops it and bounces
+  // straight back to the "scan to pair" screen instead of sitting there
+  // silently showing "Offline" forever with no way to tell what's wrong or
+  // fix it. See docs/BACKLOG.md.
+  forgetToken: () => void;
+}
+
+const PairingTokenContext = createContext<PairingContextValue | null>(null);
 
 /** The paired credential, available to anything rendered inside <PairingGate>. */
 export function usePairingToken(): string | null {
-  return useContext(PairingTokenContext);
+  return useContext(PairingTokenContext)?.token ?? null;
+}
+
+/** Call when a request using the stored credential comes back rejected. */
+export function useForgetPairingToken(): () => void {
+  const ctx = useContext(PairingTokenContext);
+  return ctx?.forgetToken ?? (() => {});
 }
 
 function getStoredToken(): string | null {
@@ -51,6 +67,15 @@ export function PairingGate({ children }: { children: ReactNode }) {
       });
   }, [token]);
 
+  function forgetToken() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Best effort, still clear the in-memory token below either way.
+    }
+    setToken(null);
+  }
+
   if (!token) {
     return (
       <main style={{ padding: 24, fontFamily: "system-ui" }}>
@@ -65,6 +90,8 @@ export function PairingGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <PairingTokenContext.Provider value={token}>{children}</PairingTokenContext.Provider>
+    <PairingTokenContext.Provider value={{ token, forgetToken }}>
+      {children}
+    </PairingTokenContext.Provider>
   );
 }

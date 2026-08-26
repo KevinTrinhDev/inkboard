@@ -42,7 +42,10 @@ const MIC_ACTIVE_HOLD_MS = 2000;
  * syncManager.ts uploads it whenever a connection to the server actually
  * exists. `serverConnected` stays purely informational in the checklist.
  */
-export function useRecordingRig(pairingToken: string | null): RecordingRig {
+export function useRecordingRig(
+  pairingToken: string | null,
+  onCredentialInvalid: () => void = () => {},
+): RecordingRig {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [pencilReady, setPencilReady] = useState(false);
@@ -139,21 +142,28 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
     url.searchParams.set("token", pairingToken);
     const ws = new WebSocket(url);
     ws.addEventListener("open", () => setServerConnected(true));
-    ws.addEventListener("close", () => setServerConnected(false));
+    ws.addEventListener("close", (event) => {
+      setServerConnected(false);
+      // 4401 means the server actively rejected this credential (expired,
+      // or revoked by a newer device pairing), not just a dropped
+      // connection. Bounce back to the pairing screen instead of sitting
+      // there showing "Offline" forever with no way to tell why or fix it.
+      if (event.code === 4401) onCredentialInvalid();
+    });
     ws.addEventListener("error", () => setServerConnected(false));
 
     return () => ws.close();
-  }, [pairingToken]);
+  }, [pairingToken, onCredentialInvalid]);
 
   useEffect(() => {
     if (!pairingToken) return;
-    const sync = startSyncLoop(() => pairingToken, setPendingSyncCount);
+    const sync = startSyncLoop(() => pairingToken, setPendingSyncCount, onCredentialInvalid);
     syncRef.current = sync;
     return () => {
       sync.stop();
       syncRef.current = null;
     };
-  }, [pairingToken]);
+  }, [pairingToken, onCredentialInvalid]);
 
   useEffect(() => {
     let cancelled = false;
