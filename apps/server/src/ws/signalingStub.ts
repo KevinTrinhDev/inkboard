@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { verifyPairingToken } from "../pairing/tokens.js";
+import { verifySessionCredential } from "../pairing/tokens.js";
 
 /**
  * M0 stub: validates the pairing token on connect and logs messages.
@@ -10,8 +10,8 @@ export async function registerSignalingStub(app: FastifyInstance) {
     const url = new URL(request.url, "http://localhost");
     const token = url.searchParams.get("token") ?? "";
 
-    if (!verifyPairingToken(token)) {
-      socket.close(4401, "invalid or expired pairing token");
+    if (!verifySessionCredential(token)) {
+      socket.close(4401, "invalid or expired session credential");
       return;
     }
 

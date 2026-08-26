@@ -1,6 +1,15 @@
+import { encryptBlob, getOrCreateRecordingKey } from "../crypto/recordingKey";
+import { enqueueUpload } from "../recording/offlineQueue";
+
 /**
- * M0 stand-in for live capture: records locally and uploads the blob on
- * stop. Live WebRTC capture is M1 — see docs/ROADMAP.md.
+ * M0 stand-in for live capture: records locally, encrypts on-device, and
+ * queues the result for upload. Live WebRTC capture is M1 — see
+ * docs/ROADMAP.md.
+ *
+ * `stop()` deliberately does NOT touch the network itself: recording must
+ * work with zero connectivity, so the only thing it depends on is local
+ * disk (via IndexedDB). syncManager.ts owns actually reaching the server,
+ * whenever a connection exists.
  */
 export class MediaRecorderCapture {
   private recorder: MediaRecorder | null = null;
@@ -9,7 +18,6 @@ export class MediaRecorderCapture {
   constructor(
     private readonly stream: MediaStream,
     private readonly sessionId: string,
-    private readonly pairingToken: string,
   ) {}
 
   start() {
@@ -23,7 +31,7 @@ export class MediaRecorderCapture {
     this.recorder.start();
   }
 
-  async stop(): Promise<Response> {
+  async stop(): Promise<void> {
     const recorder = this.recorder;
     if (!recorder) throw new Error("not recording");
 
@@ -34,10 +42,8 @@ export class MediaRecorderCapture {
     await stopped;
 
     const blob = new Blob(this.chunks, { type: "video/webm" });
-    return fetch(`/api/sessions/${this.sessionId}/upload`, {
-      method: "POST",
-      headers: { "x-pairing-token": this.pairingToken },
-      body: blob,
-    });
+    const key = await getOrCreateRecordingKey();
+    const encrypted = await encryptBlob(key, blob);
+    await enqueueUpload(this.sessionId, encrypted);
   }
 }

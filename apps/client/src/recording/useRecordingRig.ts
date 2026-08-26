@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MediaRecorderCapture } from "../av/MediaRecorderCapture";
+import { startSyncLoop } from "./syncManager";
 
 export interface PreflightState {
   pencilReady: boolean;
@@ -15,6 +16,7 @@ export interface RecordingRig {
   preflight: PreflightState;
   readyToRecord: boolean;
   isRecording: boolean;
+  pendingSyncCount: number;
   toggleRecording: () => void;
 }
 
@@ -30,6 +32,12 @@ const MIC_ACTIVE_HOLD_MS = 2000;
  * depends on (pencil touch seen, camera live, mic actually picking up sound,
  * signaling socket reachable, disk headroom), plus starting/stopping the
  * MediaRecorder capture. See docs/BACKLOG.md's "Now — UI/UX" item.
+ *
+ * Recording itself never depends on `serverConnected` — inkboard is
+ * offline-first (see docs/ARCHITECTURE.md "Offline recording"): a finished
+ * take is encrypted and queued locally regardless of connectivity, and
+ * syncManager.ts uploads it whenever a connection to the server actually
+ * exists. `serverConnected` stays purely informational in the checklist.
  */
 export function useRecordingRig(pairingToken: string | null): RecordingRig {
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -39,7 +47,9 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
   const [serverConnected, setServerConnected] = useState(false);
   const [diskOk, setDiskOk] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const captureRef = useRef<MediaRecorderCapture | null>(null);
+  const syncRef = useRef<ReturnType<typeof startSyncLoop> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +130,16 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
   }, [pairingToken]);
 
   useEffect(() => {
+    if (!pairingToken) return;
+    const sync = startSyncLoop(() => pairingToken, setPendingSyncCount);
+    syncRef.current = sync;
+    return () => {
+      sync.stop();
+      syncRef.current = null;
+    };
+  }, [pairingToken]);
+
+  useEffect(() => {
     let cancelled = false;
     async function check() {
       try {
@@ -150,28 +170,34 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
     diskOk,
   };
 
+  // Deliberately excludes `serverConnected` — inkboard records with zero
+  // network and syncs later. See the doc comment above.
   const readyToRecord =
-    preflight.pencilReady &&
-    preflight.cameraReady &&
-    preflight.micActive &&
-    preflight.serverConnected &&
-    preflight.diskOk;
+    preflight.pencilReady && preflight.cameraReady && preflight.micActive && preflight.diskOk;
 
   function toggleRecording() {
     if (!stream || !pairingToken) return;
 
     if (isRecording) {
-      void captureRef.current?.stop();
+      void captureRef.current?.stop().then(() => syncRef.current?.flushNow());
       captureRef.current = null;
       setIsRecording(false);
       return;
     }
 
-    const capture = new MediaRecorderCapture(stream, SESSION_ID, pairingToken);
+    const capture = new MediaRecorderCapture(stream, SESSION_ID);
     capture.start();
     captureRef.current = capture;
     setIsRecording(true);
   }
 
-  return { stream, cameraError, preflight, readyToRecord, isRecording, toggleRecording };
+  return {
+    stream,
+    cameraError,
+    preflight,
+    readyToRecord,
+    isRecording,
+    pendingSyncCount,
+    toggleRecording,
+  };
 }

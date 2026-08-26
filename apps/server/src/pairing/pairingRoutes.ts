@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { consumePairingNonce } from "./tokens.js";
+import { consumePairingNonce, generateSessionCredential } from "./tokens.js";
 
 export async function pairingRoutes(app: FastifyInstance) {
   app.post(
@@ -19,9 +19,10 @@ export async function pairingRoutes(app: FastifyInstance) {
       if (!body?.token || !consumePairingNonce(body.token)) {
         return reply.code(401).send({ error: "invalid, expired, or already-used pairing token" });
       }
-      // The scanned token itself becomes the session credential for M0.
-      // A real session/credential exchange is a design target for M4.
-      return reply.send({ paired: true, credential: body.token });
+      // Issue a separate, long-lived credential rather than handing back the
+      // 5-minute pairing token itself — that TTL was fine for "scan the QR"
+      // but far too short to survive an offline recording session.
+      return reply.send({ paired: true, credential: generateSessionCredential() });
     },
   );
 }

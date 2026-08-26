@@ -16,7 +16,31 @@ Grounded in the actual current state:
   toolbar's page-cycling and REC gating haven't been used on real iPad hardware yet — see
   "Verify on hardware" below.
 
-## Now — done this pass
+## Now — done this pass (offline + encryption round)
+
+**Offline-first recording** ✅ — recording no longer depends on network
+reachability at all. `readyToRecord` now gates only on pencil/camera/mic/
+disk; `serverConnected` is informational in the checklist. A finished take
+is encrypted on-device and written to IndexedDB before any network attempt,
+then a background sync loop (retry every 15s + on the `online` event)
+uploads it whenever the XPS is actually reachable. The toolbar shows a
+"N waiting to sync" count. See [SECURITY.md](./SECURITY.md) "Offline
+recording".
+
+**Client-side encryption at rest** ✅ — recordings are AES-256-GCM encrypted
+in the browser with a key generated on-device (Web Crypto) and stored only
+in that device's IndexedDB; the key is never sent over the network in any
+form. The server stores exactly the ciphertext it receives (`.webm.enc`)
+and cannot decrypt it. See [SECURITY.md](./SECURITY.md) "Encryption at
+rest" for the explicit trade-off (no key recovery/export exists yet).
+
+**Long-lived session credential** ✅ — fixes a real bug: uploads previously
+authenticated with the 5-minute pairing token itself, so any recording that
+took longer than 5 minutes to sync (which offline recording now makes
+common) would 401 on upload. Pairing now issues a separate, domain-
+separated 30-day session credential instead.
+
+## Now — done previous pass
 
 **Testing** ✅ — `apps/server` has Vitest (`pnpm test`, wired into `ci.yml`): unit tests for
 `verifyPairingToken`/`generatePairingToken`/`consumePairingNonce` (valid, expired, tampered,
