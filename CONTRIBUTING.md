@@ -1,7 +1,13 @@
 # Contributing
 
 This is currently a personal, single-maintainer project. Issues and PRs are
-welcome once the repo is public, but there's no formal process yet.
+welcome. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before
+participating.
+
+Known gaps (real iPad hardware verification, live WebRTC capture, etc.) are
+tracked in [docs/BACKLOG.md](docs/BACKLOG.md) and
+[docs/ROADMAP.md](docs/ROADMAP.md) — check there before opening an issue for
+something already planned.
 
 ## Local setup
 
