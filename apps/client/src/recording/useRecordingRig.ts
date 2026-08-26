@@ -108,8 +108,18 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
 
   useEffect(() => {
     if (pencilReady) return;
+    // Safari only reports pointerType "pen" for a genuine Apple Pencil —
+    // third-party/passive styluses (and a finger) register as "touch",
+    // same as any other touch input. Accepting "touch" too means a
+    // non-Apple stylus (or finger-drawing) isn't permanently blocked from
+    // ever satisfying this checklist item; it can't detect pressure-
+    // sensitive ink either way, but that's a hardware limit, not a reason
+    // to lock the operator out of recording entirely. Confirmed against
+    // real hardware: a third-party stylus never fires pointerType "pen".
     const onPointerDown = (event: PointerEvent) => {
-      if (event.pointerType === "pen") setPencilReady(true);
+      if (event.pointerType === "pen" || event.pointerType === "touch") {
+        setPencilReady(true);
+      }
     };
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);

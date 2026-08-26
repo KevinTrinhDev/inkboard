@@ -38,6 +38,11 @@ const iconButtonStyle = (active = false): React.CSSProperties => ({
   borderRadius: 10,
   cursor: "pointer",
   transition: "background 0.12s ease, color 0.12s ease",
+  // This toolbar renders inside tldraw's own component tree, which sits
+  // inside BoardCanvas's touch-action:none drawing surface — without this,
+  // WebKit's documented touch-action:none-suppresses-tap quirk can make
+  // these buttons stop responding to taps entirely on iPadOS Safari.
+  touchAction: "manipulation",
 });
 
 const divider: React.CSSProperties = {
@@ -81,6 +86,7 @@ export function AppToolbar() {
         flexDirection: "column",
         alignItems: "center",
         gap: 10,
+        touchAction: "manipulation",
       }}
     >
       <div

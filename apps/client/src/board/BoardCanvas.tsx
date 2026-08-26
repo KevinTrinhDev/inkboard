@@ -30,7 +30,12 @@ const components: TLComponents = {
 
 export function BoardCanvas() {
   return (
-    <div style={{ position: "fixed", inset: 0 }}>
+    // touch-action: none lives here, scoped to the drawing surface only —
+    // not on html/body — so Safari hands pen/touch gestures straight to
+    // tldraw instead of intercepting them as page pan/zoom, without also
+    // risking WebKit's touch-action:none-suppresses-tap-to-click quirk on
+    // the toolbar buttons that sit outside this element. See index.html.
+    <div style={{ position: "fixed", inset: 0, touchAction: "none" }}>
       <Tldraw shapeUtils={shapeUtils} tools={tools} components={components} />
     </div>
   );
