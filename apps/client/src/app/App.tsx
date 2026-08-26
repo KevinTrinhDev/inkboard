@@ -19,9 +19,11 @@ function AppShell() {
       <Suspense fallback={<div style={{ padding: 24 }}>Loading board…</div>}>
         <BoardCanvas />
       </Suspense>
-      <div style={{ position: "fixed", top: 12, right: 12, zIndex: 1000 }}>
-        <CameraPreview stream={rig.stream} error={rig.cameraError} />
-      </div>
+      {rig.previewVisible && (
+        <div style={{ position: "fixed", top: 12, right: 12, zIndex: 1000 }}>
+          <CameraPreview stream={rig.stream} error={rig.cameraError} />
+        </div>
+      )}
     </>
   );
 }

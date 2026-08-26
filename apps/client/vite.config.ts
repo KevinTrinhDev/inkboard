@@ -24,7 +24,7 @@ export default defineConfig({
   ],
   server: {
     // Dev server binds to the LAN interface too, but real usage goes
-    // through Caddy's local HTTPS — see infra/caddy/README.md.
+    // through Caddy's local HTTPS: see infra/caddy/README.md.
     host: "127.0.0.1",
     port: 5173,
   },
@@ -32,7 +32,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // tldraw and katex are by far the two largest dependencies and
-        // change far less often than app code — splitting them into their
+        // change far less often than app code, splitting them into their
         // own vendor chunks lets the browser cache them across app deploys
         // instead of re-downloading everything on every build.
         manualChunks: {

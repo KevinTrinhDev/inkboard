@@ -13,7 +13,7 @@ export const JournalEventSchema = z.object({
   objectId: z.string().uuid(),
   // A partial patch against whichever BoardObject `objectId` refers to.
   // Not validated against the full discriminated union here (Zod doesn't
-  // support .partial() on discriminated unions) — each field is still
+  // support .partial() on discriminated unions): each field is still
   // individually well-typed via BoardObjectBase's shape at the object level.
   payload: z.record(z.string(), z.unknown()).optional(),
   at: z.string().datetime(),

@@ -15,7 +15,7 @@ inbound port forwarding.
 
 - The server is only reachable over HTTPS, via [Caddy](https://caddyserver.com)
   using its built-in local CA (`tls internal`). Browser media APIs
-  (`getUserMedia`) require a secure context, so this isn't optional — plain
+  (`getUserMedia`) require a secure context, so this isn't optional: plain
   `http://<lan-ip>` will not work for camera/mic access.
 - The iPad must trust that local CA once: install the CA certificate as a
   Configuration Profile (`Settings → General → VPN & Device Management →
@@ -26,7 +26,7 @@ inbound port forwarding.
   with Ubuntu) rather than a raw DHCP IP, so the trusted cert and the PWA's
   "Add to Home Screen" bookmark keep working if the device's IP changes.
   Note: this requires actually configuring the alias (e.g. via
-  `/etc/avahi/hosts`) — Avahi only publishes the machine's real hostname by
+  `/etc/avahi/hosts`): Avahi only publishes the machine's real hostname by
   default, not an arbitrary name like `inkboard.local`.
 - The Fastify process itself binds to `127.0.0.1` only, never `0.0.0.0`.
   Caddy (the only intended entry point) reaches it over loopback via
@@ -39,7 +39,7 @@ inbound port forwarding.
   ports to the local LAN subnet only, and denies all other inbound traffic by
   default. No port is ever forwarded through the home router.
 - Being on the same Wi-Fi is **not** treated as sufficient authorization by
-  itself — anyone else on that network (a guest, a compromised IoT device)
+  itself: anyone else on that network (a guest, a compromised IoT device)
   would otherwise satisfy "same LAN." Device pairing (below) is the real gate.
 
 ## Device pairing (application-layer auth)
@@ -48,8 +48,8 @@ inbound port forwarding.
   QR code in the terminal (`qrcode-terminal`).
 - The iPad scans it once with the Camera app; the client stores the resulting
   token and presents it on the WebSocket handshake and any API calls.
-- Tokens are signed/verified using `PAIRING_TOKEN_SECRET` (see `.env.example`)
-  — generate a real value with `openssl rand -hex 32` and never commit it.
+- Tokens are signed/verified using `PAIRING_TOKEN_SECRET` (see `.env.example`),
+  generate a real value with `openssl rand -hex 32` and never commit it.
 - A device that doesn't present a valid token cannot open the board, connect
   to the signaling WebSocket, or upload/read session data.
 - Pairing (`POST /api/pair`) is separate from the credential used afterward:
@@ -59,6 +59,22 @@ inbound port forwarding.
   neither can be replayed as the other. This split exists specifically so an
   offline recording session (see below) can still authenticate an upload
   hours or days later without forcing a re-pair.
+- **Only one device's credential is ever valid at a time, enforced server-side.**
+  Every successful pairing bumps an in-memory generation counter and stamps
+  the new credential with it; any credential minted before that point stops
+  verifying immediately, whether it belonged to a different device or the
+  same one re-pairing. This is an active guarantee (`tokens.ts`'s
+  `currentGeneration` check), not just a documented convention. Two
+  consequences worth knowing:
+  - If a device has an offline recording still queued for upload when a new
+    (or the same) device is re-paired, that queued upload will 401 once the
+    new pairing completes. Let any pending offline recording finish
+    uploading before re-pairing, or expect to retry the upload manually
+    after re-pairing that device again.
+  - Restarting the server invalidates every existing credential, since the
+    generation counter is in-memory and reseeds on boot. Every device must
+    re-pair after a server restart. This is intentional: `PAIRING_TOKEN_SECRET`
+    itself has no persistence guarantee across restarts either.
 
 ## Offline recording
 
@@ -66,7 +82,7 @@ inkboard is offline-first: recording never depends on the signaling
 WebSocket or any network reachability, only on local device storage.
 
 - Pencil/camera/mic/disk are the only pre-flight gates on REC.
-  `serverConnected` is shown in the UI but is informational only — dropping
+  `serverConnected` is shown in the UI but is informational only: dropping
   Wi-Fi mid-lesson does not stop or block a recording.
 - A finished take is encrypted on-device (see "Encryption at rest" below)
   and written to the iPad's IndexedDB immediately, before any network
@@ -76,8 +92,8 @@ WebSocket or any network reachability, only on local device storage.
   `online` event, uploading anything still queued. The toolbar shows a
   "waiting to sync" count so the operator knows what hasn't reached the
   server yet.
-- True Bluetooth/no-network live transport isn't possible for this use case
-  — a camera feed needs far more bandwidth than Bluetooth (Classic or BLE)
+- True Bluetooth/no-network live transport isn't possible for this use case:
+  a camera feed needs far more bandwidth than Bluetooth (Classic or BLE)
   provides. Offline-first record-then-sync is the correct shape for "works
   without Wi-Fi": you're never blocked by the network being down, only
   delayed on when the recording reaches the XPS.
@@ -92,7 +108,7 @@ anywhere, including the iPad's own local queue:
   server or included in any network request, in any form.
 - Each recording is encrypted with a fresh random IV (prepended to the
   ciphertext) before being queued locally and before upload. The XPS stores
-  the resulting `.webm.enc` file exactly as received — it never possesses
+  the resulting `.webm.enc` file exactly as received: it never possesses
   the key and cannot decrypt it.
 - Practical effect: someone with access to the XPS (theft, another local
   user, a backup that leaks) gets only ciphertext. Only the iPad that
@@ -100,7 +116,7 @@ anywhere, including the iPad's own local queue:
 - Trade-off, stated plainly: this key has no recovery mechanism by design.
   If the iPad resets, its browser storage is cleared, or the device is
   lost, every recording encrypted with that key becomes permanently
-  unreadable — there is no backdoor and no export of the key today. A
+  unreadable: there is no backdoor and no export of the key today. A
   future milestone could add an explicit "export/back up this key" flow if
   that trade-off turns out to be wrong in practice; nothing does that today.
 
@@ -110,16 +126,16 @@ anywhere, including the iPad's own local queue:
   documents the required variable names with placeholder values only.
 - [gitleaks](https://github.com/gitleaks/gitleaks) runs in CI
   (`.github/workflows/gitleaks.yml`) on every push/PR, and again locally as a
-  pre-commit hook (`.husky/pre-commit`) — the intent is to catch a leaked
+  pre-commit hook (`.husky/pre-commit`): the intent is to catch a leaked
   secret before it's ever committed, not just before it's merged.
 - Caddy's local CA private key material lives under `infra/caddy/data/` and
-  `infra/caddy/config/`, both gitignored — this key can mint trusted certs for
+  `infra/caddy/config/`, both gitignored: this key can mint trusted certs for
   the LAN and must never leave the machine.
 
 ## What's explicitly out of scope right now
 
-- Multi-user auth / accounts — this is a single-operator tool.
-- Internet-facing hardening (rate limiting beyond the basics, WAF, etc.) —
+- Multi-user auth / accounts: this is a single-operator tool.
+- Internet-facing hardening (rate limiting beyond the basics, WAF, etc.):
   not needed for a LAN-only tool, and adding it without also adding real
   internet exposure would be complexity for no benefit.
 - The AI-agent API described in [API.md](./API.md) is a design target for a

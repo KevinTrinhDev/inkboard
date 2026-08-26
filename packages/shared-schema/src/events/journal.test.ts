@@ -24,7 +24,7 @@ describe("JournalEventSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects a zero or negative opId — must be monotonic and positive", () => {
+  it("rejects a zero or negative opId: must be monotonic and positive", () => {
     expect(JournalEventSchema.safeParse({ ...valid, opId: 0 }).success).toBe(false);
     expect(JournalEventSchema.safeParse({ ...valid, opId: -1 }).success).toBe(false);
   });

@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
+import { glass } from "../ui/tokens";
 
 /**
  * Renders a live preview of an already-acquired stream. The stream itself is
  * owned by useRecordingRig (a single getUserMedia call feeds both this
- * preview and the preflight checklist's camera/mic checks) — see
+ * preview and the preflight checklist's camera/mic checks), see
  * docs/ARCHITECTURE.md.
  */
 export function CameraPreview({
@@ -21,7 +22,18 @@ export function CameraPreview({
 
   if (error) {
     return (
-      <div style={{ color: "salmon", fontSize: 12 }}>
+      <div
+        style={{
+          color: "salmon",
+          fontSize: 12,
+          background: glass.surface,
+          backdropFilter: glass.blur,
+          border: `1px solid ${glass.border}`,
+          borderRadius: 12,
+          padding: 10,
+          maxWidth: 160,
+        }}
+      >
         Camera/mic unavailable: {error}
       </div>
     );
@@ -33,7 +45,13 @@ export function CameraPreview({
       autoPlay
       playsInline
       muted
-      style={{ width: 160, borderRadius: 8, background: "#000" }}
+      style={{
+        width: 160,
+        borderRadius: 14,
+        background: "#000",
+        border: `1px solid ${glass.border}`,
+        boxShadow: glass.shadow,
+      }}
     />
   );
 }

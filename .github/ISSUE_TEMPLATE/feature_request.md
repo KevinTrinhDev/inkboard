@@ -20,6 +20,6 @@ assignees: ""
 
 ## Additional context
 
-<!-- Anything else — mockups, links to similar features elsewhere, etc.
+<!-- Anything else: mockups, links to similar features elsewhere, etc.
      Check docs/ROADMAP.md and docs/BACKLOG.md first; this might already
      be planned. -->

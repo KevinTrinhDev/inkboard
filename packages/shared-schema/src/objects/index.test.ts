@@ -8,7 +8,7 @@ const base = {
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
-describe("BoardObjectSchema — text", () => {
+describe("BoardObjectSchema: text", () => {
   it("accepts a valid text object", () => {
     const result = BoardObjectSchema.safeParse({
       ...base,
@@ -34,7 +34,7 @@ describe("BoardObjectSchema — text", () => {
   });
 });
 
-describe("BoardObjectSchema — math", () => {
+describe("BoardObjectSchema: math", () => {
   it("accepts a valid math object", () => {
     const result = BoardObjectSchema.safeParse({ ...base, type: "math", latex: "F = ma" });
     expect(result.success).toBe(true);
@@ -46,7 +46,7 @@ describe("BoardObjectSchema — math", () => {
   });
 });
 
-describe("BoardObjectSchema — ink", () => {
+describe("BoardObjectSchema: ink", () => {
   it("accepts a valid ink stroke with at least one point", () => {
     const result = BoardObjectSchema.safeParse({
       ...base,
@@ -71,7 +71,7 @@ describe("BoardObjectSchema — ink", () => {
   });
 });
 
-describe("BoardObjectSchema — arrow", () => {
+describe("BoardObjectSchema: arrow", () => {
   it("accepts an arrow with at least two points", () => {
     const result = BoardObjectSchema.safeParse({
       ...base,
@@ -94,7 +94,7 @@ describe("BoardObjectSchema — arrow", () => {
   });
 });
 
-describe("BoardObjectSchema — shape", () => {
+describe("BoardObjectSchema: shape", () => {
   it("accepts a valid rect shape", () => {
     const result = BoardObjectSchema.safeParse({
       ...base,
@@ -118,7 +118,7 @@ describe("BoardObjectSchema — shape", () => {
   });
 });
 
-describe("BoardObjectSchema — cross-cutting invariants", () => {
+describe("BoardObjectSchema: cross-cutting invariants", () => {
   it("rejects an unrecognized discriminant type", () => {
     const result = BoardObjectSchema.safeParse({ ...base, type: "video", content: "x" });
     expect(result.success).toBe(false);

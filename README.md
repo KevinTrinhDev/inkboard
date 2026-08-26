@@ -2,7 +2,7 @@
 
 # inkboard
 
-**Draw and teach on an iPad, record a facecam, get semantic data back — not a video file.**
+**Draw and teach on an iPad, record a facecam, get semantic data back: not a video file.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/KevinTrinhDev/inkboard/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/KevinTrinhDev/inkboard/actions/workflows/ci.yml)
@@ -18,7 +18,7 @@
 You draw on an **iPad** with Apple Pencil while a facecam records you. The
 **laptop** (any always-on Linux machine on your home network) is the quiet
 brain: it stores what you record and, later, adds AI transcription. No
-cloud, ever — the two just talk to each other over your own WiFi.
+cloud, ever: the two just talk to each other over your own WiFi.
 
 The board itself is never a picture. Every stroke, word, and equation is
 saved as *data* (`TEXT "F = ma"`, not a photo of "F = ma"), so it can be
@@ -28,17 +28,17 @@ redrawn at any size or style later without ever touching a video frame.
 
 ```mermaid
 flowchart LR
-    subgraph iPad["📱 iPad — the screen you use"]
+    subgraph iPad["📱 iPad: the screen you use"]
         direction TB
         pencil["Draw with Apple Pencil"] --> canvas["Shows up instantly"]
         cam["Camera + mic"] --> lock["Locked with a key<br/>only this iPad has"]
         lock --> queue[("Saved on-device<br/>even with no WiFi")]
     end
 
-    subgraph xps["🖥️ Laptop — the quiet brain"]
+    subgraph xps["🖥️ Laptop: the quiet brain"]
         direction TB
         caddy["Private HTTPS<br/>(LAN only)"] --> server["Stores + serves the app"]
-        server --> disk[("Locked recordings —<br/>laptop can't unlock them")]
+        server --> disk[("Locked recordings:<br/>laptop can't unlock them")]
     end
 
     queue -->|"sent over WiFi<br/>once connected"| caddy
@@ -52,7 +52,7 @@ flowchart LR
 - **Recording never needs WiFi.** A finished take is locked and saved on the
   iPad first, then quietly sent to the laptop whenever a connection exists.
 - **The laptop never sees your recording unlocked.** The lock key lives only
-  on the iPad — theft or a compromised laptop only exposes ciphertext.
+  on the iPad: theft or a compromised laptop only exposes ciphertext.
 - **Nothing ever leaves your home network.** No cloud, no third party.
 
 Full write-up: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (design decisions)
@@ -80,7 +80,7 @@ Full steps: [docs/SECURITY.md](docs/SECURITY.md) and
 | Command | What it does |
 |---|---|
 | `pnpm install` | Install everything |
-| `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` | The full verification gate — all four must pass before shipping |
+| `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` | The full verification gate: all four must pass before shipping |
 | `pnpm dev:server` / `pnpm dev:client` | Run one app on its own |
 
 ## Repo layout
@@ -111,5 +111,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Playpen Sans (planned handwriting font, see
+MIT, see [LICENSE](LICENSE). Playpen Sans (planned handwriting font, see
 ROADMAP) ships under its own OFL license.

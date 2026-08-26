@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { generatePairingToken } from "./tokens.js";
+import { generatePairingToken, verifySessionCredential } from "./tokens.js";
 import { pairingRoutes } from "./pairingRoutes.js";
 
 let app: FastifyInstance;
@@ -59,12 +59,35 @@ describe("POST /api/pair", () => {
     expect(body.credential.startsWith("session.")).toBe(true);
   });
 
-  it("rejects the same token pairing twice — single-use handshake", async () => {
+  it("rejects the same token pairing twice: single-use handshake", async () => {
     const token = generatePairingToken();
     const first = await app.inject({ method: "POST", url: "/api/pair", payload: { token } });
     expect(first.statusCode).toBe(200);
 
     const second = await app.inject({ method: "POST", url: "/api/pair", payload: { token } });
     expect(second.statusCode).toBe(401);
+  });
+
+  it("revokes the first device's credential the moment a second device pairs", async () => {
+    const firstPairingToken = generatePairingToken();
+    const firstRes = await app.inject({
+      method: "POST",
+      url: "/api/pair",
+      payload: { token: firstPairingToken },
+    });
+    const firstCredential = firstRes.json().credential;
+    expect(verifySessionCredential(firstCredential)).toBe(true);
+
+    const secondPairingToken = generatePairingToken();
+    const secondRes = await app.inject({
+      method: "POST",
+      url: "/api/pair",
+      payload: { token: secondPairingToken },
+    });
+    const secondCredential = secondRes.json().credential;
+
+    // The whole point: pairing a new device silently kicks the old one off.
+    expect(verifySessionCredential(firstCredential)).toBe(false);
+    expect(verifySessionCredential(secondCredential)).toBe(true);
   });
 });

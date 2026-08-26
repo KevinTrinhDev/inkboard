@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
  * Short-lived, HMAC-signed pairing tokens. A device that presents a valid,
- * unexpired token is considered paired — this is the actual authorization
+ * unexpired token is considered paired: this is the actual authorization
  * gate, not "is on the same Wi-Fi." See docs/SECURITY.md.
  */
 
@@ -20,15 +20,30 @@ export interface PairingToken {
 export interface SessionCredential {
   sessionNonce: string;
   issuedAt: number;
+  // Only the credential stamped with the current generation is valid; see
+  // currentGeneration below. Every new pairing invalidates every credential
+  // minted before it, so at most one device is ever trusted at a time.
+  generation: number;
 }
 
 // Nonces consumed by the /api/pair handshake, so a captured token can't be
 // replayed to re-run pairing even inside its TTL. Not checked by
 // verifyPairingToken() itself, since the same token doubles as the bearer
-// credential for uploads/signaling for the rest of the M0 session — see
+// credential for uploads/signaling for the rest of the M0 session: see
 // pairingRoutes.ts. Evicted lazily on the token's own TTL so this can't grow
 // without bound.
 const consumedNonces = new Map<string, number>();
+
+// Single-active-session enforcement: every successful pairing bumps this
+// counter and stamps the new credential with the result, so any credential
+// minted before it (a different device, or a stale re-pair of the same one)
+// stops verifying the moment a new pairing succeeds. Seeded from Date.now()
+// rather than a fixed 0/1 so a server restart can never coincidentally
+// revive a credential from a previous process's lifetime, at the cost of
+// every device needing to re-pair after any restart. That's an intentional
+// trade, not an oversight: PAIRING_TOKEN_SECRET itself has no persistence
+// guarantee across restarts either. See docs/SECURITY.md.
+let currentGeneration = Date.now();
 
 function evictExpiredNonces(now: number): void {
   for (const [nonce, expiresAt] of consumedNonces) {
@@ -79,7 +94,7 @@ export function verifyPairingToken(token: string): boolean {
   if (!timingSafeEqual(expectedBuf, actualBuf)) return false;
 
   // The signature check above already proves this payload was produced by
-  // generatePairingToken() for any input we issued — but a byte-identical
+  // generatePairingToken() for any input we issued, but a byte-identical
   // signature isn't guaranteed for arbitrary attacker input, so decoding
   // still must not be allowed to throw and take the process down with it.
   try {
@@ -98,15 +113,21 @@ export function verifyPairingToken(token: string): boolean {
 /**
  * Long-lived (30 day) credential issued once at pairing time. Unlike the
  * short-lived pairing token, this is what the client actually uses as its
- * bearer credential for uploads/signaling afterward — a 5-minute TTL was too
+ * bearer credential for uploads/signaling afterward: a 5-minute TTL was too
  * short to survive a fully offline recording session (see
  * docs/SECURITY.md "Offline recording"), so pairing no longer hands back the
  * pairing token itself as the credential.
+ *
+ * Every call bumps currentGeneration first, so this both mints a fresh
+ * credential and implicitly revokes every credential minted before it in
+ * the same step. There is no separate revocation list to maintain.
  */
 export function generateSessionCredential(): string {
+  currentGeneration += 1;
   const credential: SessionCredential = {
     sessionNonce: randomBytes(16).toString("hex"),
     issuedAt: Date.now(),
+    generation: currentGeneration,
   };
   const payloadB64 = Buffer.from(JSON.stringify(credential)).toString("base64url");
   const signature = signSession(payloadB64);
@@ -128,7 +149,10 @@ export function verifySessionCredential(token: string): boolean {
   try {
     const decoded: SessionCredential = JSON.parse(Buffer.from(payloadB64, "base64url").toString());
     return (
-      typeof decoded.issuedAt === "number" && Date.now() - decoded.issuedAt <= SESSION_TTL_MS
+      typeof decoded.issuedAt === "number" &&
+      typeof decoded.generation === "number" &&
+      Date.now() - decoded.issuedAt <= SESSION_TTL_MS &&
+      decoded.generation === currentGeneration
     );
   } catch {
     return false;

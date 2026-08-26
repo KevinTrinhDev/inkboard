@@ -7,7 +7,7 @@ export type TextShape = TLBaseShape<
 
 /**
  * Renders plain styled text for now. Playpen-Sans wiring (7 alternates/glyph
- * + shuffler) is deferred to ROADMAP M5 — the shape type and normalized
+ * + shuffler) is deferred to ROADMAP M5: the shape type and normalized
  * storage exist today so nothing about the data model changes when the font
  * lands. See packages/shared-schema/src/objects/text.ts for the persisted
  * shape.

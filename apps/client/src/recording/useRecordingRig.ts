@@ -16,11 +16,14 @@ export interface RecordingRig {
   preflight: PreflightState;
   readyToRecord: boolean;
   isRecording: boolean;
+  elapsedMs: number;
   pendingSyncCount: number;
+  previewVisible: boolean;
+  togglePreview: () => void;
   toggleRecording: () => void;
 }
 
-// One id per app load — a "session" is one continuous recording take (or a
+// One id per app load: a "session" is one continuous recording take (or a
 // board opened to draw on). Real multi-take session management is M1.
 const SESSION_ID = crypto.randomUUID();
 const MIN_FREE_BYTES = 500 * 1024 * 1024; // rough "enough room for a take"
@@ -31,10 +34,10 @@ const MIC_ACTIVE_HOLD_MS = 2000;
  * Owns the camera/mic stream and every signal the pre-flight checklist
  * depends on (pencil touch seen, camera live, mic actually picking up sound,
  * signaling socket reachable, disk headroom), plus starting/stopping the
- * MediaRecorder capture. See docs/BACKLOG.md's "Now — UI/UX" item.
+ * MediaRecorder capture. See docs/BACKLOG.md's "Now, UI/UX" item.
  *
- * Recording itself never depends on `serverConnected` — inkboard is
- * offline-first (see docs/ARCHITECTURE.md "Offline recording"): a finished
+ * Recording itself never depends on `serverConnected`: inkboard is
+ * offline-first (see docs/ARCHITECTURE.md "Offline recording"). A finished
  * take is encrypted and queued locally regardless of connectivity, and
  * syncManager.ts uploads it whenever a connection to the server actually
  * exists. `serverConnected` stays purely informational in the checklist.
@@ -47,9 +50,12 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
   const [serverConnected, setServerConnected] = useState(false);
   const [diskOk, setDiskOk] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [previewVisible, setPreviewVisible] = useState(true);
   const captureRef = useRef<MediaRecorderCapture | null>(null);
   const syncRef = useRef<ReturnType<typeof startSyncLoop> | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,7 +114,7 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
 
   useEffect(() => {
     if (pencilReady) return;
-    // Safari only reports pointerType "pen" for a genuine Apple Pencil —
+    // Safari only reports pointerType "pen" for a genuine Apple Pencil:
     // third-party/passive styluses (and a finger) register as "touch",
     // same as any other touch input. Accepting "touch" too means a
     // non-Apple stylus (or finger-drawing) isn't permanently blocked from
@@ -154,7 +160,7 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
     async function check() {
       try {
         if (!navigator.storage?.estimate) {
-          if (!cancelled) setDiskOk(true); // can't determine — don't block on it
+          if (!cancelled) setDiskOk(true); // can't determine, don't block on it
           return;
         }
         const { quota, usage } = await navigator.storage.estimate();
@@ -180,10 +186,20 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
     diskOk,
   };
 
-  // Deliberately excludes `serverConnected` — inkboard records with zero
+  // Deliberately excludes `serverConnected`: inkboard records with zero
   // network and syncs later. See the doc comment above.
   const readyToRecord =
     preflight.pencilReady && preflight.cameraReady && preflight.micActive && preflight.diskOk;
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const interval = setInterval(() => {
+      if (recordingStartedAtRef.current !== null) {
+        setElapsedMs(Date.now() - recordingStartedAtRef.current);
+      }
+    }, 250);
+    return () => clearInterval(interval);
+  }, [isRecording]);
 
   function toggleRecording() {
     if (!stream || !pairingToken) return;
@@ -191,14 +207,22 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
     if (isRecording) {
       void captureRef.current?.stop().then(() => syncRef.current?.flushNow());
       captureRef.current = null;
+      recordingStartedAtRef.current = null;
       setIsRecording(false);
+      setElapsedMs(0);
       return;
     }
 
     const capture = new MediaRecorderCapture(stream, SESSION_ID);
     capture.start();
     captureRef.current = capture;
+    recordingStartedAtRef.current = Date.now();
+    setElapsedMs(0);
     setIsRecording(true);
+  }
+
+  function togglePreview() {
+    setPreviewVisible((visible) => !visible);
   }
 
   return {
@@ -207,7 +231,10 @@ export function useRecordingRig(pairingToken: string | null): RecordingRig {
     preflight,
     readyToRecord,
     isRecording,
+    elapsedMs,
     pendingSyncCount,
+    previewVisible,
+    togglePreview,
     toggleRecording,
   };
 }

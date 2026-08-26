@@ -1,7 +1,7 @@
 /**
  * Durable queue for encrypted recordings waiting to reach the server. A
- * finished recording is written here immediately — before any network
- * attempt — so recording works with zero connectivity and nothing is lost
+ * finished recording is written here immediately, before any network
+ * attempt, so recording works with zero connectivity and nothing is lost
  * if the tab closes or the device goes offline mid-upload. syncManager.ts
  * drains this queue whenever a connection exists.
  */

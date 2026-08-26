@@ -41,7 +41,7 @@ export function PairingGate({ children }: { children: ReactNode }) {
         try {
           localStorage.setItem(STORAGE_KEY, data.credential);
         } catch {
-          // Best effort — pairing still works for this session even if
+          // Best effort: pairing still works for this session even if
           // storage is unavailable (e.g. private browsing).
         }
         setToken(data.credential);

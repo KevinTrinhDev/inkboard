@@ -5,7 +5,7 @@ import { JournalEventSchema } from "./events/index.js";
 /**
  * The single JSON Schema document served at `GET /api/schema` (apps/server)
  * and consumed by anything that wants to validate or generate board objects
- * without importing TypeScript directly — including a future AI agent.
+ * without importing TypeScript directly, including a future AI agent.
  */
 export function getBoardJsonSchema() {
   return {

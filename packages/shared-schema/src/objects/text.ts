@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BoardObjectBaseSchema } from "./base.js";
 
 /**
- * Semantic, typed text — rendered via a handwriting-style variable font
+ * Semantic, typed text: rendered via a handwriting-style variable font
  * (Playpen Sans, see ROADMAP M5), never stored as strokes/pixels. `lang` +
  * `content` are what a translation pass regenerates.
  */

@@ -1,10 +1,10 @@
 import type { SVGProps } from "react";
 
 /**
- * Minimal line-icon set for the toolbar — hand-authored inline SVG rather
- * than an icon package dependency, since the toolbar only needs ~10 glyphs
- * and this keeps the bundle free of an extra font/sprite fetch. 24x24
- * viewBox, 1.75px stroke, no fill — matches across every icon here.
+ * Minimal line-icon set for the toolbar: hand-authored inline SVG rather
+ * than an icon package dependency, since the toolbar only needs a dozen
+ * glyphs and this keeps the bundle free of an extra font/sprite fetch. 24x24
+ * viewBox, 1.75px stroke, no fill, matches across every icon here.
  */
 
 const base: SVGProps<SVGSVGElement> = {
@@ -118,6 +118,25 @@ export function StopIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...base} {...props}>
       <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function EyeIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+export function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M2 12s3.5-7 10-7c1.9 0 3.5.5 4.9 1.2M22 12s-3.5 7-10 7c-1.9 0-3.5-.5-4.9-1.2" />
+      <path d="M15.5 9.5a3 3 0 0 1-4.2 4.2" />
+      <path d="M3 3l18 18" />
     </svg>
   );
 }

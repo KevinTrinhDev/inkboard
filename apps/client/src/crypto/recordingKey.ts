@@ -7,7 +7,7 @@
  * no way to decrypt. See docs/SECURITY.md "Encryption at rest".
  *
  * Trade-off worth knowing: losing this device's browser storage (reset,
- * reinstall, cleared site data) means losing the key permanently — there is
+ * reinstall, cleared site data) means losing the key permanently: there is
  * no recovery, by design. That's the same trade-off any real E2E scheme
  * makes; a recoverable key would mean something other than the device could
  * decrypt, which defeats the point.
@@ -91,7 +91,7 @@ export async function encryptBlob(key: CryptoKey, blob: Blob): Promise<Blob> {
   return new Blob([out], { type: "application/octet-stream" });
 }
 
-/** Inverse of {@link encryptBlob} — reads the prepended IV and decrypts the rest. */
+/** Inverse of {@link encryptBlob}: reads the prepended IV and decrypts the rest. */
 export async function decryptBlob(key: CryptoKey, blob: Blob): Promise<Blob> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const iv = bytes.slice(0, IV_LENGTH_BYTES);

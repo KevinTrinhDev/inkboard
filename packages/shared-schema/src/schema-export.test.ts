@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getBoardJsonSchema } from "./schema-export.js";
 
-// This is what GET /api/schema actually serves — a regression here would
+// This is what GET /api/schema actually serves. A regression here would
 // silently break any external caller (including a future AI agent) relying
 // on it to validate/generate board objects without importing TypeScript.
 describe("getBoardJsonSchema", () => {

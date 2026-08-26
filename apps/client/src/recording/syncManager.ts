@@ -4,7 +4,7 @@ const RETRY_INTERVAL_MS = 15_000;
 
 /**
  * Drains the offline upload queue whenever a connection to the server
- * exists. Recording itself never depends on this running — it only decides
+ * exists. Recording itself never depends on this running: it only decides
  * *when* an already-finished, already-encrypted recording actually reaches
  * the XPS. Safe to call `flushNow` as often as you like; it no-ops while a
  * flush is already in flight.
@@ -35,13 +35,13 @@ export function startSyncLoop(
           if (res.ok) {
             await removeQueuedUpload(item.sessionId);
           } else if (res.status === 401) {
-            // Credential expired/invalid — nothing more we can do until
+            // Credential expired/invalid: nothing more we can do until
             // re-pairing; stop trying this pass rather than spin on it.
             break;
           }
           // Any other non-OK status: leave it queued, retry next pass.
         } catch {
-          // Offline or server unreachable — stop this pass, the interval
+          // Offline or server unreachable: stop this pass, the interval
           // (or the next `online` event) will retry.
           break;
         }

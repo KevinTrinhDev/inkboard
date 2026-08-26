@@ -7,7 +7,7 @@ export type MathShape = TLBaseShape<
 >;
 
 // KaTeX (and its CSS) is only paid for once a Math object actually exists on
-// the board, not on every page load — dynamic import, cached after first use.
+// the board, not on every page load: dynamic import, cached after first use.
 let katexModulePromise: Promise<typeof import("katex")> | null = null;
 function loadKatex() {
   katexModulePromise ??= import("katex").then(async (mod) => {
@@ -38,7 +38,7 @@ function MathRenderer({ latex }: { latex: string }) {
 }
 
 /**
- * Renders a hardcoded LaTeX string via KaTeX to prove the rendering path —
+ * Renders a hardcoded LaTeX string via KaTeX to prove the rendering path:
  * math is never typed in the handwriting font (legibility of x/2/z matters
  * more than stylistic consistency). See docs/ARCHITECTURE.md.
  */

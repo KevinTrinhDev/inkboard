@@ -3,7 +3,7 @@ import { verifySessionCredential } from "../pairing/tokens.js";
 
 /**
  * M0 stub: validates the pairing token on connect and logs messages.
- * Real SDP/ICE relay for live WebRTC capture is M1 — see docs/ROADMAP.md.
+ * Real SDP/ICE relay for live WebRTC capture is M1: see docs/ROADMAP.md.
  */
 export async function registerSignalingStub(app: FastifyInstance) {
   app.get("/ws", { websocket: true }, (socket, request) => {

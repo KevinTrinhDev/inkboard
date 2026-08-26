@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BoardObjectBaseSchema, NormalizedCoordinate } from "./base.js";
 
 /**
- * Raw Apple Pencil strokes. Maps directly to tldraw's native `draw` shape —
+ * Raw Apple Pencil strokes. Maps directly to tldraw's native `draw` shape:
  * this is the path that has to feel instant, so it deliberately carries no
  * extra logic beyond the point/pressure samples.
  */

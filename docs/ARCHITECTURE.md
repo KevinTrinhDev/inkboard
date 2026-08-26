@@ -12,7 +12,7 @@ ARROW  points: [...]
 SHAPE  rect | ellipse | line, rough-rendered
 ```
 
-A renderer turns those objects into pixels at export time — never the other way
+A renderer turns those objects into pixels at export time, never the other way
 around. This is the single decision the rest of the system exists to serve, and
 it's why every choice below favors "store meaning" over "store an image."
 
@@ -24,11 +24,11 @@ What it buys us:
   be re-rendered with the new look.
 - **Translation.** A `TEXT` object carries a `lang` field and the source
   content. Localizing a video means generating new `TEXT`/`MATH` objects in
-  another language at the same board position and re-rendering — not OCR,
+  another language at the same board position and re-rendering, not OCR,
   not video inpainting.
 - **Agent-friendliness.** Because the board is a documented object schema
-  (`packages/shared-schema`), anything that can emit valid objects — a human
-  drawing, or later an AI agent narrating a lesson — can drive the board. See
+  (`packages/shared-schema`), anything that can emit valid objects (a human
+  drawing, or later an AI agent narrating a lesson) can drive the board. See
   [API.md](./API.md).
 
 ## System diagram
@@ -77,14 +77,17 @@ extensible custom shape/tool types to a level of polish that would take a long
 time to match from scratch (e.g. hand-rolled `perfect-freehand` + `Rough.js` +
 manual tiling). We extend it with custom shape types (`TextShapeUtil`,
 `MathShapeUtil`, etc.) rather than replacing its core. Ink strokes use tldraw's
-native `draw` shape directly — that's the thing that has to feel instant under
+native `draw` shape directly: that's the thing that has to feel instant under
 an Apple Pencil, so we don't add any custom logic in that path.
 
 ### AV transport: plain WebRTC P2P, not an SFU
 This system is always exactly one iPad talking to exactly one server on a home
-LAN. An SFU (LiveKit, mediasoup) exists to route media between many
-participants — added infrastructure (signaling servers, media routing, often
-Redis/Postgres) that buys nothing here and is more attack surface to secure.
+LAN, actively enforced (not just conventional) since pairing a new device
+revokes the previous one's credential server-side, see docs/SECURITY.md
+"Device pairing." An SFU (LiveKit, mediasoup) exists to route media between
+many participants: added infrastructure (signaling servers, media routing,
+often Redis/Postgres) that buys nothing here and is more attack surface to
+secure.
 A small custom WebSocket signaling server plus direct WebRTC P2P is the right
 amount of machinery for 1:1. If this ever needs multiple simultaneous
 viewers, mediasoup is the documented fallback (see ROADMAP M1+).
@@ -95,12 +98,12 @@ stops. This proves camera/mic permissions and the upload path work without
 first building real-time transport. Live WebRTC capture is M1.
 
 ### Transport security: local HTTPS + LAN firewall + device pairing
-Browser media APIs (`getUserMedia`) require a secure context — plain
+Browser media APIs (`getUserMedia`) require a secure context: plain
 `http://192.168.x.x` won't work. Caddy's built-in local CA (`tls internal`)
 solves this without needing a public domain or Let's Encrypt. The iPad trusts
 that CA once (a Configuration Profile install + enabling full trust). On top
-of that, UFW restricts inbound traffic to the LAN subnet only — nothing is
-ever exposed to the internet — and a one-time QR device-pairing step is the
+of that, UFW restricts inbound traffic to the LAN subnet only. Nothing is
+ever exposed to the internet, and a one-time QR device-pairing step is the
 actual authentication gate, because "on the same Wi-Fi" is not, by itself,
 sufficient authorization. Full detail in [SECURITY.md](./SECURITY.md).
 
@@ -108,13 +111,13 @@ sufficient authorization. Full detail in [SECURITY.md](./SECURITY.md).
 The XPS has an NVIDIA GPU (RTX 3050 Ti Laptop), and faster-whisper's CTranslate2
 CUDA backend outperforms whisper.cpp on NVIDIA hardware. It runs as a
 long-lived local HTTP sidecar (127.0.0.1-only) so the model stays warm in GPU
-memory between "tap text tool, speak a phrase" invocations — the whole point
+memory between "tap text tool, speak a phrase" invocations: the whole point
 of the shortcut is that it has to feel fast.
 
 ### Text rendering: Playpen Sans, not real handwriting recognition
 Playpen Sans (OFL-licensed, TypeTogether) ships seven alternate glyph forms
 per character plus a built-in OpenType shuffler that avoids repeating the same
-glyph shape nearby — specifically designed to avoid the "obviously a font"
+glyph shape nearby, specifically designed to avoid the "obviously a font"
 look real handwriting fonts usually have. Font wiring is deferred to M5; the
 `TEXT` shape type and its normalized-coordinate storage exist from M0 so
 nothing about the data model has to change when the font lands.

@@ -3,7 +3,7 @@ import { enqueueUpload } from "../recording/offlineQueue";
 
 /**
  * M0 stand-in for live capture: records locally, encrypts on-device, and
- * queues the result for upload. Live WebRTC capture is M1 — see
+ * queues the result for upload. Live WebRTC capture is M1: see
  * docs/ROADMAP.md.
  *
  * `stop()` deliberately does NOT touch the network itself: recording must

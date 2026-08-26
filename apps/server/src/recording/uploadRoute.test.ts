@@ -83,8 +83,8 @@ describe("POST /api/sessions/:id/upload", () => {
   });
 
   it("rejects a short-lived pairing token used as the upload credential", async () => {
-    // The 5-minute pairing token authenticates the /api/pair handshake only
-    // — uploads (which may arrive long after an offline session) require the
+    // The 5-minute pairing token authenticates the /api/pair handshake only.
+    // Uploads (which may arrive long after an offline session) require the
     // separate long-lived session credential.
     const token = generatePairingToken();
     const res = await app.inject({

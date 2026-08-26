@@ -20,7 +20,7 @@ export async function pairingRoutes(app: FastifyInstance) {
         return reply.code(401).send({ error: "invalid, expired, or already-used pairing token" });
       }
       // Issue a separate, long-lived credential rather than handing back the
-      // 5-minute pairing token itself — that TTL was fine for "scan the QR"
+      // 5-minute pairing token itself: that TTL was fine for "scan the QR"
       // but far too short to survive an offline recording session.
       return reply.send({ paired: true, credential: generateSessionCredential() });
     },

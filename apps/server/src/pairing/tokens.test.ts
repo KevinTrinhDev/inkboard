@@ -68,7 +68,7 @@ describe("consumePairingNonce", () => {
 
   it("still lets verifyPairingToken succeed after the nonce is consumed", () => {
     // The token keeps working as the bearer credential for uploads/signaling
-    // after pairing — only the /api/pair handshake itself is single-use.
+    // after pairing: only the /api/pair handshake itself is single-use.
     const token = generatePairingToken();
     consumePairingNonce(token);
     expect(verifyPairingToken(token)).toBe(true);
@@ -129,5 +129,57 @@ describe("verifySessionCredential", () => {
     const sessionCredential = generateSessionCredential();
     const [, payloadB64, sessionSignature] = sessionCredential.split(".");
     expect(verifyPairingToken(`${payloadB64}.${sessionSignature}`)).toBe(false);
+  });
+});
+
+describe("single-active-session generation invalidation", () => {
+  it("invalidates the previous credential the moment a new one is minted", () => {
+    const first = generateSessionCredential();
+    expect(verifySessionCredential(first)).toBe(true);
+
+    const second = generateSessionCredential();
+    expect(verifySessionCredential(first)).toBe(false);
+    expect(verifySessionCredential(second)).toBe(true);
+  });
+
+  it("keeps only the newest of several sequential mints valid, with no grace window", () => {
+    const credentials = [
+      generateSessionCredential(),
+      generateSessionCredential(),
+      generateSessionCredential(),
+      generateSessionCredential(),
+    ];
+    const results = credentials.map((c) => verifySessionCredential(c));
+    expect(results).toEqual([false, false, false, true]);
+  });
+
+  it("revokes even a re-pair of the same device, since the server has no device identity concept", () => {
+    // There is nothing distinguishing "the same iPad re-pairing" from "a
+    // different device pairing" at this layer, and there shouldn't be: the
+    // whole point of the feature is "most recently paired wins," full stop.
+    const original = generateSessionCredential();
+    const rePaired = generateSessionCredential();
+    expect(verifySessionCredential(original)).toBe(false);
+    expect(verifySessionCredential(rePaired)).toBe(true);
+  });
+
+  it("rejects a credential missing the generation field, old-shape payloads fail closed", () => {
+    const payload = { sessionNonce: "abc123", issuedAt: Date.now() };
+    const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    const signature = createHmac("sha256", process.env.PAIRING_TOKEN_SECRET!)
+      .update(`session.${payloadB64}`)
+      .digest("hex");
+    expect(verifySessionCredential(`session.${payloadB64}.${signature}`)).toBe(false);
+  });
+
+  it("rejects a tampered generation even with an otherwise-valid signature target", () => {
+    // Bumping `generation` in the decoded payload without re-signing must
+    // still be caught by the HMAC check, not just the equality check.
+    const valid = generateSessionCredential();
+    const [prefix, payloadB64, signature] = valid.split(".");
+    const decoded = JSON.parse(Buffer.from(payloadB64 ?? "", "base64url").toString());
+    const tampered = { ...decoded, generation: decoded.generation + 1 };
+    const tamperedB64 = Buffer.from(JSON.stringify(tampered)).toString("base64url");
+    expect(verifySessionCredential(`${prefix}.${tamperedB64}.${signature}`)).toBe(false);
   });
 });

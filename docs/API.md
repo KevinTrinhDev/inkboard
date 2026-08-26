@@ -1,10 +1,10 @@
 # Board schema & API
 
 The types described here live in `packages/shared-schema` and are the single
-source of truth — both the tldraw client and the server import from this
+source of truth: both the tldraw client and the server import from this
 package, so the on-canvas representation and the persisted/replayable
 representation can never drift apart. This is also the contract a future
-AI agent would target (see [ROADMAP.md](./ROADMAP.md) M4) — it's designed for
+AI agent would target (see [ROADMAP.md](./ROADMAP.md) M4); it's designed for
 that from day one even though only a human draws on the board today.
 
 ## Board objects
@@ -21,16 +21,16 @@ interface BoardObjectBase {
 }
 ```
 
-- **TEXT** — `{ content: string; lang: string; size: number; style: string }`.
+- **TEXT**: `{ content: string; lang: string; size: number; style: string }`.
   Rendered via the handwriting-style font (Playpen Sans, M5). `lang` +
-  `content` are what a translation pass regenerates — never touch pixels.
-- **MATH** — `{ latex: string; size: number }`. Rendered via KaTeX, never the
-  handwriting font — math legibility (`x` vs `2` vs `z`) matters more than
+  `content` are what a translation pass regenerates: never touch pixels.
+- **MATH**: `{ latex: string; size: number }`. Rendered via KaTeX, never the
+  handwriting font: math legibility (`x` vs `2` vs `z`) matters more than
   stylistic consistency.
-- **INK** — `{ points: { x: number; y: number; pressure: number }[] }`. Raw
+- **INK**: `{ points: { x: number; y: number; pressure: number }[] }`. Raw
   Pencil strokes; maps directly to tldraw's native `draw` shape.
-- **ARROW** — `{ points: { x: number; y: number }[] }`.
-- **SHAPE** — `{ kind: "rect" | "ellipse" | "line"; x2: number; y2: number }`,
+- **ARROW**: `{ points: { x: number; y: number }[] }`.
+- **SHAPE**: `{ kind: "rect" | "ellipse" | "line"; x2: number; y2: number }`,
   rendered with a hand-drawn/sketchy style.
 
 ## Journal (event log)
@@ -58,22 +58,22 @@ board. This is why ops are monotonic integers, not just timestamps or UUIDs.
 
 **Implemented today (M0):**
 
-- `GET /api/schema` — returns the JSON Schema for the object/event types above,
+- `GET /api/schema`: returns the JSON Schema for the object/event types above,
   generated from `packages/shared-schema`. Exists to prove the pattern: the
   server's idea of the schema and the client's idea of the schema are the same
   artifact, not two hand-maintained copies.
-- `POST /api/pair` — exchanges a scanned pairing token for a session
+- `POST /api/pair`: exchanges a scanned pairing token for a session
   credential (see [SECURITY.md](./SECURITY.md)).
-- `POST /api/sessions/:id/upload` — accepts a `MediaRecorder` blob on
+- `POST /api/sessions/:id/upload`: accepts a `MediaRecorder` blob on
   recording stop (M0's stand-in for live capture; see ROADMAP M1).
 
-**Design target, not yet implemented** — sketched here so the data model
+**Design target, not yet implemented**: sketched here so the data model
 doesn't need to change when these land:
 
-- `POST /api/sessions/:id/objects` — create a board object programmatically.
+- `POST /api/sessions/:id/objects`: create a board object programmatically.
   This is the primary surface an AI agent would use to "draw" on a board
   (e.g. narrate a lesson and place `TEXT`/`MATH`/`ARROW` objects as it talks).
-- `GET /api/sessions/:id/journal?fromOp=N` — resync/replay the event log,
+- `GET /api/sessions/:id/journal?fromOp=N`: resync/replay the event log,
   described above.
 - A WebSocket event stream mirroring the journal in real time, for a live
   collaborator (human or agent) watching a session.
@@ -83,5 +83,5 @@ doesn't need to change when these land:
 Because `TEXT`/`MATH` objects carry `lang` and their source content rather
 than baked pixels, producing a Spanish or French version of a board means
 generating new `TEXT` objects at the same normalized position with translated
-`content` — not OCR, not video inpainting, not subtitle overlays. See
+`content`, not OCR, not video inpainting, not subtitle overlays. See
 [ARCHITECTURE.md](./ARCHITECTURE.md) for the full rationale.

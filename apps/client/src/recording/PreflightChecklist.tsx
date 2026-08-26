@@ -1,8 +1,9 @@
 import type { PreflightState } from "./useRecordingRig";
+import { glass, status, text } from "../ui/tokens";
 
-// serverConnected is intentionally NOT in this list — it's shown separately
-// below as informational only. Recording is offline-first: none of these
-// five gate REC, only pencil/camera/mic/disk do. See useRecordingRig.ts.
+// serverConnected is intentionally NOT in this list: it's shown separately
+// below as informational only. Recording is offline-first, none of these
+// four gate REC, only pencil/camera/mic/disk do. See useRecordingRig.ts.
 const ITEMS: Array<[key: keyof PreflightState, label: string]> = [
   ["pencilReady", "Pencil"],
   ["cameraReady", "Camera"],
@@ -24,11 +25,7 @@ const itemStyle: React.CSSProperties = {
   gap: 6,
 };
 
-const OK = "#4ade80";
-const PENDING = "#4a4a4d";
-const WARN = "#facc15";
-
-/** Compact status row — a colored dot per signal, no text-heavy checkmarks. */
+/** Compact status row: a colored dot per signal, no text-heavy checkmarks. */
 export function PreflightChecklist({
   preflight,
   pendingSyncCount,
@@ -45,7 +42,7 @@ export function PreflightChecklist({
         alignItems: "center",
         fontFamily: "system-ui, sans-serif",
         fontSize: 11.5,
-        color: "#a1a1a6",
+        color: text.dim,
         letterSpacing: 0.1,
       }}
     >
@@ -53,23 +50,23 @@ export function PreflightChecklist({
         const ok = preflight[key];
         return (
           <span key={key} style={itemStyle}>
-            <span style={dotStyle(ok ? OK : PENDING)} />
-            <span style={{ color: ok ? "#e8e8ea" : "#a1a1a6" }}>{label}</span>
+            <span style={dotStyle(ok ? status.ok : status.pending)} />
+            <span style={{ color: ok ? text.onDim : text.dim }}>{label}</span>
           </span>
         );
       })}
 
-      <span style={{ width: 1, height: 12, background: "rgba(255,255,255,0.1)" }} />
+      <span style={{ width: 1, height: 12, background: glass.divider }} />
 
       <span style={itemStyle}>
-        <span style={dotStyle(preflight.serverConnected ? OK : WARN)} />
-        <span style={{ color: preflight.serverConnected ? "#e8e8ea" : "#a1a1a6" }}>
+        <span style={dotStyle(preflight.serverConnected ? status.ok : status.warn)} />
+        <span style={{ color: preflight.serverConnected ? text.onDim : text.dim }}>
           {preflight.serverConnected ? "Online" : "Offline"}
         </span>
       </span>
 
       {pendingSyncCount > 0 && (
-        <span style={{ color: WARN }}>{pendingSyncCount} waiting to sync</span>
+        <span style={{ color: status.warn }}>{pendingSyncCount} waiting to sync</span>
       )}
     </div>
   );

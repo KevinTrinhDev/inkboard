@@ -6,7 +6,7 @@ participating.
 
 Known gaps (real iPad hardware verification, live WebRTC capture, etc.) are
 tracked in [docs/BACKLOG.md](docs/BACKLOG.md) and
-[docs/ROADMAP.md](docs/ROADMAP.md) — check there before opening an issue for
+[docs/ROADMAP.md](docs/ROADMAP.md): check there before opening an issue for
 something already planned.
 
 ## Local setup
@@ -30,6 +30,6 @@ that look like they contain a secret. Don't bypass it with `--no-verify`.
   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for why it's a separate
   sidecar process rather than part of the JS workspace).
 - Keep `packages/shared-schema` the single source of truth for board object
-  and journal event shapes — don't redefine them locally in the client or
+  and journal event shapes: don't redefine them locally in the client or
   server.
 - Commit messages: short, imperative, no AI/automation attribution.

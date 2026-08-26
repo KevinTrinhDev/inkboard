@@ -3,7 +3,7 @@ import { BaseBoxShapeUtil, HTMLContainer, T, type RecordProps, type TLBaseShape 
 export type ArrowShape = TLBaseShape<"inkboard-arrow", { w: number; h: number }>;
 
 /**
- * Toolbar stub — registers the tool so it's present in the UI. Full
+ * Toolbar stub: registers the tool so it's present in the UI. Full
  * multi-point arrow rendering (matching packages/shared-schema's ArrowObject)
  * is not required for the M0 latency/permissions proof-of-concept.
  */
