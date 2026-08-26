@@ -31,7 +31,9 @@ async function main() {
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:"],
         mediaSrc: ["'self'", "blob:"],
-        connectSrc: ["'self'", "ws:", "wss:"],
+        // wss: only — the app is always served over HTTPS via Caddy, so a
+        // plain ws: connection should never be attempted or allowed.
+        connectSrc: ["'self'", "wss:"],
       },
     },
   });
@@ -50,7 +52,12 @@ async function main() {
 
   app.get("/healthz", async () => ({ ok: true }));
 
-  await app.listen({ port, host: "0.0.0.0" });
+  // 127.0.0.1 only — Caddy (reverse_proxy 127.0.0.1:{port}) is the sole
+  // intended entry point. Binding this to 0.0.0.0 would let anyone on the
+  // LAN reach the API directly over plain HTTP, bypassing TLS entirely and
+  // defeating the whole point of the Caddy local-CA setup. See
+  // docs/SECURITY.md "Transport".
+  await app.listen({ port, host: "127.0.0.1" });
 
   printPairingQr(`https://${domain}`);
 }

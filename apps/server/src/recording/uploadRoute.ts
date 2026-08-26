@@ -1,9 +1,15 @@
 import { createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, unlink } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { FastifyInstance } from "fastify";
 import { verifySessionCredential } from "../pairing/tokens.js";
+
+// Defense in depth alongside Caddy's own `request_body { max_size }` — this
+// route can also be hit directly against the Fastify port during local
+// dev/testing, so it shouldn't rely solely on the reverse proxy in front of
+// it to bound upload size.
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024; // 2GB, matches Caddyfile
 
 /**
  * M0 stand-in for live capture: the client records locally via
@@ -44,8 +50,31 @@ export async function registerUploadRoute(app: FastifyInstance) {
       return reply.code(400).send({ error: "invalid session id" });
     }
 
+    const contentLength = Number(request.headers["content-length"] ?? 0);
+    if (contentLength > MAX_UPLOAD_BYTES) {
+      return reply.code(413).send({ error: "upload too large" });
+    }
+
     const fileStream = createWriteStream(filePath);
-    await pipeline(request.raw, fileStream);
+    let bytesWritten = 0;
+    request.raw.on("data", (chunk: Buffer) => {
+      bytesWritten += chunk.length;
+      if (bytesWritten > MAX_UPLOAD_BYTES) {
+        request.raw.destroy(new Error("upload exceeded size limit"));
+      }
+    });
+
+    try {
+      await pipeline(request.raw, fileStream);
+    } catch (err) {
+      // Never leave a truncated/corrupt file behind that a later listing or
+      // playback attempt could mistake for a complete recording.
+      await unlink(filePath).catch(() => {
+        // Best effort — nothing more to do if this also fails.
+      });
+      request.log.error({ err, sessionId: id }, "upload failed, partial file removed");
+      return reply.code(502).send({ error: "upload failed, please retry" });
+    }
 
     return reply.send({ stored: true, path: filePath });
   });

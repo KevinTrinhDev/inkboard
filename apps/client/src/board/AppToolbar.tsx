@@ -1,32 +1,57 @@
 import { useEditor, useValue } from "tldraw";
 import { useRecordingContext } from "../recording/RecordingContext";
 import { PreflightChecklist } from "../recording/PreflightChecklist";
+import {
+  ArrowIcon,
+  EraserIcon,
+  MathIcon,
+  PageIcon,
+  PenIcon,
+  RecordIcon,
+  RedoIcon,
+  SelectIcon,
+  ShapeIcon,
+  StopIcon,
+  TextIcon,
+  UndoIcon,
+} from "./icons";
 
-const TOOLS: Array<[id: string, label: string]> = [
-  ["select", "Select"],
-  ["draw", "Pen"],
-  ["eraser", "Eraser"],
-  ["inkboard-text", "Text"],
-  ["inkboard-math", "Math"],
-  ["inkboard-arrow", "Arrow"],
-  ["inkboard-shape", "Shape"],
+const TOOLS: Array<[id: string, label: string, Icon: typeof SelectIcon]> = [
+  ["select", "Select", SelectIcon],
+  ["draw", "Pen", PenIcon],
+  ["eraser", "Eraser", EraserIcon],
+  ["inkboard-text", "Text", TextIcon],
+  ["inkboard-math", "Math", MathIcon],
+  ["inkboard-arrow", "Arrow", ArrowIcon],
+  ["inkboard-shape", "Shape", ShapeIcon],
 ];
 
-const buttonStyle = (active = false): React.CSSProperties => ({
-  padding: "6px 10px",
-  fontSize: 13,
-  fontFamily: "system-ui, sans-serif",
-  background: active ? "#3b3b3b" : "transparent",
-  color: "#eee",
-  border: "1px solid #444",
-  borderRadius: 6,
+const iconButtonStyle = (active = false): React.CSSProperties => ({
+  width: 40,
+  height: 40,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: active ? "rgba(255,255,255,0.14)" : "transparent",
+  color: active ? "#fff" : "#c9c9c9",
+  border: "none",
+  borderRadius: 10,
   cursor: "pointer",
+  transition: "background 0.12s ease, color 0.12s ease",
 });
 
+const divider: React.CSSProperties = {
+  width: 1,
+  alignSelf: "stretch",
+  margin: "6px 4px",
+  background: "rgba(255,255,255,0.1)",
+};
+
 /**
- * The purpose-built, boring toolbar from the original spec — replaces
- * default tldraw UI entirely (see BoardCanvas.tsx's `components` override).
- * Pen/Eraser/Undo/Redo/Page/REC, plus the pre-flight checklist gating REC.
+ * Icon-only toolbar — minimal, premium chrome replacing default tldraw UI
+ * (see BoardCanvas.tsx's `components` override). Tooltips carry the label
+ * text via `title` so nothing is lost for accessibility/discoverability;
+ * the visual surface stays quiet on purpose.
  */
 export function AppToolbar() {
   const editor = useEditor();
@@ -48,21 +73,23 @@ export function AppToolbar() {
     <div
       style={{
         position: "fixed",
-        bottom: 12,
+        bottom: 16,
         left: "50%",
         transform: "translateX(-50%)",
         zIndex: 1000,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 8,
+        gap: 10,
       }}
     >
       <div
         style={{
-          background: "#1a1a1aee",
-          padding: "6px 10px",
-          borderRadius: 10,
+          background: "rgba(20,20,22,0.92)",
+          backdropFilter: "blur(12px)",
+          padding: "6px 14px",
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,0.08)",
         }}
       >
         <PreflightChecklist preflight={rig.preflight} pendingSyncCount={rig.pendingSyncCount} />
@@ -71,42 +98,71 @@ export function AppToolbar() {
       <div
         style={{
           display: "flex",
-          gap: 6,
-          background: "#1a1a1aee",
-          padding: 8,
-          borderRadius: 12,
+          alignItems: "center",
+          gap: 2,
+          background: "rgba(20,20,22,0.92)",
+          backdropFilter: "blur(12px)",
+          padding: 6,
+          borderRadius: 18,
+          border: "1px solid rgba(255,255,255,0.08)",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
         }}
       >
-        {TOOLS.map(([id, label]) => (
+        {TOOLS.map(([id, label, Icon]) => (
           <button
             key={id}
-            style={buttonStyle(currentToolId === id)}
+            title={label}
+            aria-label={label}
+            style={iconButtonStyle(currentToolId === id)}
             onClick={() => editor.setCurrentTool(id)}
           >
-            {label}
+            <Icon width={19} height={19} />
           </button>
         ))}
-        <button style={buttonStyle()} onClick={() => editor.undo()}>
-          Undo
-        </button>
-        <button style={buttonStyle()} onClick={() => editor.redo()}>
-          Redo
-        </button>
-        <button style={buttonStyle()} onClick={nextOrNewPage}>
-          Page
+
+        <div style={divider} />
+
+        <button
+          title="Undo"
+          aria-label="Undo"
+          style={iconButtonStyle()}
+          onClick={() => editor.undo()}
+        >
+          <UndoIcon width={19} height={19} />
         </button>
         <button
+          title="Redo"
+          aria-label="Redo"
+          style={iconButtonStyle()}
+          onClick={() => editor.redo()}
+        >
+          <RedoIcon width={19} height={19} />
+        </button>
+        <button
+          title="New / next page"
+          aria-label="New or next page"
+          style={iconButtonStyle()}
+          onClick={nextOrNewPage}
+        >
+          <PageIcon width={19} height={19} />
+        </button>
+
+        <div style={divider} />
+
+        <button
+          title={rig.isRecording ? "Stop recording" : "Start recording"}
+          aria-label={rig.isRecording ? "Stop recording" : "Start recording"}
           style={{
-            ...buttonStyle(),
-            background: rig.isRecording ? "#dc2626" : "transparent",
-            borderColor: rig.isRecording ? "#dc2626" : "#444",
-            opacity: !rig.isRecording && !rig.readyToRecord ? 0.4 : 1,
+            ...iconButtonStyle(),
+            color: rig.isRecording ? "#fff" : "#ef4444",
+            background: rig.isRecording ? "#ef4444" : "transparent",
+            opacity: !rig.isRecording && !rig.readyToRecord ? 0.35 : 1,
             cursor: !rig.isRecording && !rig.readyToRecord ? "not-allowed" : "pointer",
           }}
           disabled={!rig.isRecording && !rig.readyToRecord}
           onClick={rig.toggleRecording}
         >
-          {rig.isRecording ? "■ Stop" : "● REC"}
+          {rig.isRecording ? <StopIcon width={16} height={16} /> : <RecordIcon width={16} height={16} />}
         </button>
       </div>
     </div>

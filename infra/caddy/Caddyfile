@@ -10,7 +10,17 @@
 {$CADDY_DOMAIN:inkboard.local} {
 	tls internal
 
-	reverse_proxy 127.0.0.1:{$SERVER_PORT:8080}
+	# TEMPORARY: serves the local CA cert itself over the already-firewalled
+	# 443 port, so it can be downloaded on the iPad without opening any new
+	# port. Remove this block once the cert has been trusted on-device.
+	handle /inkboard-ca.crt {
+		root * {$REPO_ROOT}
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:{$SERVER_PORT:8080}
+	}
 
 	# Firm ceiling; recordings are uploaded once on stop (M0), not streamed.
 	request_body {

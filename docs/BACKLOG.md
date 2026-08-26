@@ -16,7 +16,60 @@ Grounded in the actual current state:
   toolbar's page-cycling and REC gating haven't been used on real iPad hardware yet — see
   "Verify on hardware" below.
 
-## Now — done this pass (offline + encryption round)
+## Now — done this pass (hardware verification + hardening round)
+
+**Real hardware findings** — first actual iPad + Apple Pencil test run surfaced two real
+bugs, both fixed and confirmed live:
+- **Pencil drew like a mouse (no ink, camera panned/zoomed instead).** Root cause: the page
+  never told Safari to hand touch/pointer gestures to the canvas — without `touch-action:
+  none` + `overscroll-behavior: none` on `html`/`body`/`#root`, Safari intercepts a
+  one-finger drag as native scroll/pinch-zoom before tldraw's own pointer handling ever sees
+  it. Fixed in `apps/client/index.html`.
+- **`inkboard.local` never resolved at all.** Avahi publishes the machine's actual hostname
+  (`<hostname>.local`), not an arbitrary alias — nothing had configured `inkboard.local` as
+  an mDNS alias, so every attempt just hung. Worked around by pointing `CADDY_DOMAIN` at the
+  LAN IP directly instead (`192.168.1.88`), which needs no name resolution at all. A real
+  fix (an `/etc/avahi/hosts` alias, or a router DHCP reservation + proper mDNS config) is
+  still open — see "Next" below.
+
+**Security fixes found during a real audit pass** — all confirmed live via `ss -tlnp` and
+`curl` before/after:
+- **Fastify was bound to `0.0.0.0:8080`** — directly reachable on the LAN over plain HTTP,
+  completely bypassing Caddy's TLS termination. Fixed to `127.0.0.1` only; confirmed the
+  direct port now refuses connections from the LAN while `https://<ip>/healthz` through
+  Caddy still returns 200.
+- **Upload route left corrupt partial files on a failed/interrupted transfer** (disk full,
+  connection drop) with no cleanup, and could leak raw error details in the response. Now
+  cleans up the partial file and returns a generic error; also added an explicit byte-count
+  cap as defense in depth alongside Caddy's own `request_body` limit, since this route can be
+  hit directly during local dev without going through Caddy at all.
+- **CSP allowed plain `ws:`** even though the app is always served over HTTPS/`wss:` via
+  Caddy — tightened to `wss:` only.
+
+**UI pass**: toolbar rebuilt as icon-only buttons (hand-authored inline SVG, no new
+dependency) instead of text labels — tooltips carry the label text for accessibility. The
+pre-flight checklist switched from text checkmarks to compact colored-dot indicators.
+Verified via `pnpm typecheck && pnpm lint && pnpm test && pnpm build` (24/24 tests).
+
+**Explicitly out of scope for this pass, and why:**
+- Removing the tldraw watermark — tldraw requires either a free community license key
+  (available at tldraw.dev for qualifying use) or a paid commercial one; hiding it without
+  either would violate their license terms. Get a key and it's a one-line wire-up.
+- Router/Wi-Fi hardening (WPA3, guest network isolation, firmware updates) and iPad-side
+  settings (passcode, auto-lock, iOS updates) — both require direct access to the router
+  admin panel and the physical device's Settings app, neither of which this tooling can
+  reach or configure.
+- A "production" deployment — this project is LAN-only by design (see SECURITY.md); there is
+  no cloud target to deploy to. The XPS it already runs on *is* the deployment target.
+
+**Not yet fixed — a real known gap**: a recording's ink/video only reaches durable storage
+(IndexedDB, then upload) once `stop()` completes; if the browser tab crashes or the app is
+force-closed mid-recording, everything captured since the last `start()` is lost — nothing is
+persisted incrementally during an in-progress take. Fixing this properly means writing
+`MediaRecorder` chunks to IndexedDB as they arrive rather than buffering them in memory until
+stop, which is a real design change, not a quick patch — tracked here rather than rushed.
+
+## Previous pass (offline + encryption round)
 
 **Offline-first recording** ✅ — recording no longer depends on network
 reachability at all. `readyToRecord` now gates only on pencil/camera/mic/

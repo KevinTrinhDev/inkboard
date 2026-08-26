@@ -9,7 +9,21 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>inkboard</title>
     <style>
-      html, body, #root { height: 100%; margin: 0; }
+      /* Apple Pencil / touch input must reach tldraw's own pointer handling
+         directly — without these, Safari intercepts a one-finger drag as
+         page pan/rubber-band-scroll or pinch-zoom before the canvas ever
+         sees it, which reads as "the pen acts like a mouse cursor" instead
+         of drawing. Confirmed against real iPad hardware. */
+      html, body, #root {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      body { position: fixed; inset: 0; }
     </style>
   </head>
   <body>
