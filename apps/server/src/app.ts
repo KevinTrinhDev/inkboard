@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
@@ -26,11 +27,24 @@ function isApiPath(url: string): boolean {
   return API_PREFIXES.some((prefix) => path === prefix || path.startsWith(prefix));
 }
 
+export interface BuildAppOptions {
+  /**
+   * Directory holding the built client. Defaults to the real apps/client/dist.
+   * Tests override it with a fixture so they do not depend on `pnpm build`
+   * having run first: CI runs `pnpm test` before `pnpm build`, so a test that
+   * needs the real bundle passes locally and fails in CI.
+   */
+  clientDist?: string;
+}
+
 /**
  * Builds the fully configured server without listening, so tests can drive it
  * through app.inject() instead of binding a port.
  */
-export async function buildApp(): Promise<FastifyInstance> {
+export async function buildApp(
+  options: BuildAppOptions = {},
+): Promise<FastifyInstance> {
+  const clientDist = options.clientDist ?? join(__dirname, "../../client/dist");
   const app = Fastify({
     logger: {
       serializers: {
@@ -70,11 +84,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   await app.register(fastifyWebsocket);
-  await app.register(fastifyStatic, {
-    root: join(__dirname, "../../client/dist"),
-    // Fastify's ready check fails loudly if the client hasn't been built
-    // yet; that's intentional feedback during setup, not a bug.
-  });
+  await app.register(fastifyStatic, { root: clientDist });
 
   await app.register(pairingRoutes);
   await registerSignalingStub(app);
@@ -96,6 +106,17 @@ export async function buildApp(): Promise<FastifyInstance> {
         statusCode: 404,
       });
     }
+    // Starting the server without building the client is a common setup
+    // mistake, and a bare 404 on every page is a confusing way to discover
+    // it. Say what is actually wrong.
+    if (!existsSync(join(clientDist, "index.html"))) {
+      return reply.code(503).send({
+        error: "Service Unavailable",
+        message: `Client bundle not found at ${clientDist}. Run \`pnpm build\` first.`,
+        statusCode: 503,
+      });
+    }
+
     return reply.sendFile("index.html");
   });
 

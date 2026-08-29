@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
@@ -6,17 +9,26 @@ import { buildApp } from "./app.js";
  * The startup QR encodes /pair?token=..., which used to 404 because the SPA
  * is served as static files and no /pair asset exists. That broke the only
  * documented way to pair a device, so these assertions guard the rewrite.
+ *
+ * The client bundle is faked with a temp fixture rather than using the real
+ * apps/client/dist: CI runs `pnpm test` before `pnpm build`, so depending on
+ * the real bundle makes these pass locally and fail in CI.
  */
 describe("SPA fallback", () => {
   let app: FastifyInstance;
+  let clientDist: string;
 
   beforeAll(async () => {
-    app = await buildApp();
+    clientDist = mkdtempSync(join(tmpdir(), "inkboard-client-"));
+    writeFileSync(join(clientDist, "index.html"), "<!doctype html><title>inkboard</title>");
+
+    app = await buildApp({ clientDist });
     await app.ready();
   });
 
   afterAll(async () => {
     await app.close();
+    rmSync(clientDist, { recursive: true, force: true });
   });
 
   it("serves the SPA shell at the URL the pairing QR encodes", async () => {
@@ -48,5 +60,28 @@ describe("SPA fallback", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
+  });
+});
+
+describe("SPA fallback when the client was never built", () => {
+  let app: FastifyInstance;
+  let emptyDist: string;
+
+  beforeAll(async () => {
+    emptyDist = mkdtempSync(join(tmpdir(), "inkboard-empty-"));
+    app = await buildApp({ clientDist: emptyDist });
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+    rmSync(emptyDist, { recursive: true, force: true });
+  });
+
+  it("explains the missing bundle instead of returning a bare 404", async () => {
+    const res = await app.inject({ method: "GET", url: "/pair" });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json().message).toContain("pnpm build");
   });
 });
