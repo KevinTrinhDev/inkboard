@@ -27,6 +27,12 @@ interface Peer {
   role: SyncRole;
   authenticated: boolean;
   alive: boolean;
+  /**
+   * Retained so the credential can be revalidated on every heartbeat. Checking
+   * only at hello meant a credential that was later revoked, or evicted by the
+   * device cap, kept full write access for as long as its socket stayed open.
+   */
+  token: string | null;
 }
 
 function send(socket: WebSocket, message: ServerMessage): void {
@@ -75,6 +81,15 @@ export async function registerBoardSync(
 
   const heartbeat = setInterval(() => {
     for (const peer of peers) {
+      // Revalidate here rather than only at hello, so revoking sessions or
+      // exceeding the device cap actually ejects a connected device instead
+      // of leaving it writing to the board until it happens to disconnect.
+      if (peer.authenticated && peer.token && !verifySessionCredential(peer.token)) {
+        fail(peer.socket, "unauthenticated", "session credential is no longer valid");
+        peer.socket.close(4401, "session revoked");
+        continue;
+      }
+
       if (!peer.alive) {
         // Missed the previous round trip: assume the socket is dead.
         peer.socket.terminate();
@@ -96,7 +111,13 @@ export async function registerBoardSync(
   });
 
   app.get("/ws", { websocket: true }, (socket: WebSocket) => {
-    const peer: Peer = { socket, role: "mirror", authenticated: false, alive: true };
+    const peer: Peer = {
+      socket,
+      role: "mirror",
+      authenticated: false,
+      alive: true,
+      token: null,
+    };
     peers.add(peer);
 
     const authTimer = setTimeout(() => {
@@ -135,14 +156,44 @@ export async function registerBoardSync(
       const message = parsed.data;
 
       if (message.type === "hello") {
+        // One hello per socket. Without this a connection that authenticated
+        // as a read-only mirror could send a second hello claiming
+        // role "editor" and promote itself to write access.
+        if (peer.authenticated) {
+          fail(socket, "bad-message", "already authenticated on this socket");
+          return;
+        }
+
         if (!verifySessionCredential(message.token)) {
           fail(socket, "unauthenticated", "invalid or expired session credential");
           socket.close(4401, "invalid or expired session credential");
           return;
         }
 
+        // One pen at a time. Two editors would each be excluded from their own
+        // broadcasts, and with no revision numbers on the wire there is
+        // nothing to converge them: concurrent edits to one shape would leave
+        // the two devices permanently disagreeing.
+        //
+        // The newest editor takes over rather than being refused. A
+        // reconnecting iPad routinely arrives before the server has noticed
+        // its previous socket died, and refusing it would lock the operator
+        // out of their own board until a heartbeat happened to reap the
+        // zombie.
+        if (message.role === "editor") {
+          for (const other of peers) {
+            if (other === peer || !other.authenticated || other.role !== "editor") {
+              continue;
+            }
+            fail(other.socket, "not-an-editor", "another device took over the pen");
+            other.socket.close(4409, "replaced by a newer editor");
+            peers.delete(other);
+          }
+        }
+
         peer.authenticated = true;
         peer.role = message.role;
+        peer.token = message.token;
         clearTimeout(authTimer);
 
         send(socket, {

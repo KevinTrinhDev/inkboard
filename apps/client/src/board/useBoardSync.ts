@@ -70,20 +70,36 @@ export function useBoardSync(
 
     /** True while applying a server diff, so we never bounce it back. */
     let applyingRemote = false;
+    /** Set once the server has answered hello; nothing is sent before then. */
+    let welcomed = false;
     let pending = emptyRecordsDiff();
 
-    const send = (message: ClientMessage) => {
-      if (socket?.readyState === WebSocket.OPEN) {
+    /** Returns whether the frame actually reached the socket. */
+    const send = (message: ClientMessage): boolean => {
+      if (socket?.readyState !== WebSocket.OPEN) return false;
+      try {
         socket.send(JSON.stringify(message));
+        return true;
+      } catch {
+        return false;
       }
     };
 
     const flush = () => {
-      if (isEmptyRecordsDiff(pending)) return;
+      // Hold everything until the server has answered hello. Sending before
+      // then races the welcome: the server would accept the diff and then the
+      // already-queued snapshot would overwrite it locally, leaving this
+      // device behind the board it just edited.
+      if (!welcomed || isEmptyRecordsDiff(pending)) return;
+
       const diff = pending;
-      pending = emptyRecordsDiff();
       // tldraw's RecordsDiff and the wire RecordsDiff are the same shape.
-      send({ v: SYNC_PROTOCOL_VERSION, type: "diff", diff });
+      // Only clear after a confirmed send: clearing first meant edits made
+      // while the iPad was asleep or roaming between access points were
+      // dropped on the floor, then erased for good by the next snapshot.
+      if (send({ v: SYNC_PROTOCOL_VERSION, type: "diff", diff })) {
+        pending = emptyRecordsDiff();
+      }
     };
 
     const connect = () => {
@@ -100,7 +116,10 @@ export function useBoardSync(
       socket = ws;
 
       ws.onopen = () => {
-        reconnectAttempt = 0;
+        // Deliberately not resetting reconnectAttempt here: a server that
+        // accepts the TCP connection and immediately drops it (a partial
+        // restart) would reset the backoff on every attempt and turn this
+        // into a 500ms reconnect storm. It resets on welcome instead.
         send({
           v: SYNC_PROTOCOL_VERSION,
           type: "hello",
@@ -125,11 +144,21 @@ export function useBoardSync(
 
         switch (message.type) {
           case "welcome": {
+            reconnectAttempt = 0;
+            welcomed = true;
             setStatus("live");
             setPeers(message.peers);
 
             const hasRemoteBoard = Object.keys(message.records).length > 0;
             if (hasRemoteBoard) {
+              // Local edits made while connecting are carried across the
+              // snapshot load rather than lost to it. loadStoreSnapshot
+              // replaces the whole store, so without this a stroke drawn
+              // during reconnect would vanish from this device even though
+              // the server had already accepted it.
+              const carried = pending;
+              pending = emptyRecordsDiff();
+
               applyingRemote = true;
               try {
                 current.store.mergeRemoteChanges(() => {
@@ -141,6 +170,21 @@ export function useBoardSync(
                 });
               } finally {
                 applyingRemote = false;
+              }
+
+              // loadStoreSnapshot clears the store and recreates the session
+              // records it needs, and a recreated instance record defaults to
+              // isReadonly: false. Without this the mirror silently becomes
+              // editable the first time it receives a board.
+              if (roleRef.current === "mirror") {
+                current.updateInstanceState({ isReadonly: true });
+              }
+
+              if (roleRef.current === "editor" && !isEmptyRecordsDiff(carried)) {
+                // Replayed as a local change so the listener re-queues it and
+                // it flushes normally, putting this device's work back on top
+                // of the authoritative board.
+                current.store.applyDiff(carried as never);
               }
             } else if (roleRef.current === "editor") {
               // Server has nothing yet: seed it from this device so a mirror
@@ -188,6 +232,7 @@ export function useBoardSync(
 
       ws.onclose = () => {
         socket = null;
+        welcomed = false;
         if (!disposed) {
           setStatus("offline");
           scheduleReconnect();

@@ -26,6 +26,7 @@ export class BoardState {
   private records: Record<string, SyncRecord> = {};
   private schema: Record<string, unknown> | undefined;
   private dirty = false;
+  private closed = false;
   private saveTimer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -87,7 +88,9 @@ export class BoardState {
 
   private scheduleSave(): void {
     this.dirty = true;
-    if (this.saveTimer) return;
+    // Never arm a timer after shutdown: close() flushes, and a failed flush
+    // retries, which would otherwise leave a timer running past close.
+    if (this.closed || this.saveTimer) return;
 
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
@@ -118,8 +121,12 @@ export class BoardState {
       renameSync(tmp, this.filePath);
     } catch {
       // Losing a board save must never take the server down mid-lesson. The
-      // in-memory board stays authoritative for connected devices.
+      // in-memory board stays authoritative for connected devices, and the
+      // write is retried: without rescheduling, a single transient failure
+      // left the file stale indefinitely if no further drawing happened, so
+      // a later crash would lose everything since the last good save.
       this.dirty = true;
+      this.scheduleSave();
     }
   }
 
@@ -129,6 +136,7 @@ export class BoardState {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
+    this.closed = true;
     this.flush();
   }
 }

@@ -166,6 +166,40 @@ anywhere, including the iPad's own local queue:
   `infra/caddy/config/`, both gitignored: this key can mint trusted certs for
   the LAN and must never leave the machine.
 
+## Known limitations
+
+Found in an independent review of the board-sync work and deliberately not
+fixed, rather than overlooked. Both are acceptable on a single-operator LAN
+tool and would not be on anything internet-facing.
+
+### An asset URL is a capability
+
+`GET /api/assets/:id` does not check a credential, unlike the upload. This is
+forced by how the board renders images: the browser fetches them as ordinary
+`<img src>` subresources, which cannot carry an `Authorization` header. So the
+unguessable id in the URL is what protects the file.
+
+The consequences: anyone on the LAN who obtains an asset URL can read that
+file, including after their own credential has been revoked, and the URL does
+not expire. Ids are random UUIDs, so blind enumeration is impractical. Signed,
+expiring asset URLs are the real fix if this ever needs to be tighter.
+
+### Board and asset storage are unbounded
+
+The 8 MB cap is per WebSocket frame, not per board. Nothing evicts old board
+records or deletes assets, and no quota is enforced across a session:
+
+- a long lesson with many pasted images or videos grows the assets directory
+  until the disk fills;
+- the board record map grows in memory and is re-serialized to JSON on every
+  save, and sent in full to every device that connects.
+
+For one person teaching on their own laptop this is a housekeeping matter, not
+an attack. A paired device that turns hostile could fill the disk deliberately,
+which is worth knowing but is the same trust level that already lets it draw on
+the board. Session-scoped boards and asset garbage collection are the fix, and
+belong with the session storage work in [ROADMAP.md](./ROADMAP.md).
+
 ## What's explicitly out of scope right now
 
 - Multi-user auth / accounts: this is a single-operator tool.

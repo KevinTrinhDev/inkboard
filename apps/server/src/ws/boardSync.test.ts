@@ -185,6 +185,59 @@ describe("board sync hub", () => {
     late.terminate();
   });
 
+  it("refuses a second hello, so a mirror cannot promote itself to editor", async () => {
+    const socket = await app.injectWS("/ws");
+    send(socket, { v: V, type: "hello", role: "mirror", token: freshCredential() });
+    await nextMessage(socket); // welcome
+
+    // Without this guard the connection could re-hello as an editor and gain
+    // write access to a board it is only supposed to be watching.
+    send(socket, { v: V, type: "hello", role: "editor", token: freshCredential() });
+    const msg = await nextMessage(socket);
+
+    expect(msg.type).toBe("error");
+    if (msg.type !== "error") throw new Error("expected error");
+    expect(msg.code).toBe("bad-message");
+
+    // Still read-only afterwards.
+    send(socket, {
+      v: V,
+      type: "diff",
+      diff: { added: { "shape:x": record("shape:x") }, updated: {}, removed: {} },
+    });
+    const after = await nextMessage(socket);
+    if (after.type !== "error") throw new Error("expected error");
+    expect(after.code).toBe("not-an-editor");
+
+    socket.terminate();
+  });
+
+  it("lets a newer editor take over the pen from a stale one", async () => {
+    const first = await app.injectWS("/ws");
+    send(first, { v: V, type: "hello", role: "editor", token: freshCredential() });
+    await nextMessage(first); // welcome
+
+    // A reconnecting iPad usually arrives before the server has noticed its
+    // previous socket died. Refusing it would lock the operator out.
+    const second = await app.injectWS("/ws");
+    send(second, { v: V, type: "hello", role: "editor", token: freshCredential() });
+    const welcome = await nextMessage(second);
+    expect(welcome.type).toBe("welcome");
+
+    // The newcomer really does hold the pen.
+    send(second, {
+      v: V,
+      type: "diff",
+      diff: { added: { "shape:new": record("shape:new") }, updated: {}, removed: {} },
+    });
+    send(second, { v: V, type: "ping" });
+    const pong = await nextMessage(second);
+    expect(pong.type).toBe("pong");
+
+    first.terminate();
+    second.terminate();
+  });
+
   it("answers a malformed frame with an error rather than closing", async () => {
     const socket = await app.injectWS("/ws");
     socket.send("this is not json");

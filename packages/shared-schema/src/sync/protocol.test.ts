@@ -134,6 +134,42 @@ describe("squashRecordsDiff", () => {
   });
 });
 
+describe("offline accumulation", () => {
+  it("keeps accumulating across many windows so nothing is lost while offline", () => {
+    // The client only clears its pending diff once a send is confirmed. This
+    // asserts the accumulator itself stays correct over a long offline burst,
+    // which is what makes those queued edits survive to the reconnect.
+    const pending = emptyRecordsDiff();
+    for (let i = 0; i < 200; i += 1) {
+      squashRecordsDiff(pending, {
+        added: { [`shape:o${i}`]: rec(`shape:o${i}`, { i }) },
+        updated: {},
+        removed: {},
+      });
+    }
+
+    const applied = applyRecordsDiff({}, pending);
+    expect(Object.keys(applied)).toHaveLength(200);
+    expect(applied["shape:o199"]).toMatchObject({ i: 199 });
+  });
+
+  it("a stroke drawn and undone while offline sends nothing at all", () => {
+    const pending = emptyRecordsDiff();
+    squashRecordsDiff(pending, {
+      added: { "shape:tmp": rec("shape:tmp") },
+      updated: {},
+      removed: {},
+    });
+    squashRecordsDiff(pending, {
+      added: {},
+      updated: {},
+      removed: { "shape:tmp": rec("shape:tmp") },
+    });
+
+    expect(isEmptyRecordsDiff(pending)).toBe(true);
+  });
+});
+
 describe("message envelopes", () => {
   it("accepts a well-formed hello", () => {
     const parsed = ClientMessageSchema.safeParse({
