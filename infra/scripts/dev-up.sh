@@ -25,8 +25,12 @@ set -a
 . ./.env
 set +a
 
-echo "Building client..."
-pnpm --filter @inkboard/client build
+# Builds every workspace package in dependency order, not just the client.
+# On a fresh checkout @inkboard/shared-schema has no dist yet, so building the
+# client on its own fails with "Cannot find module '@inkboard/shared-schema'",
+# which is exactly what a first-time setup hits.
+echo "Building..."
+pnpm -r run build
 
 echo "Starting server..."
 pnpm --filter @inkboard/server dev &
