@@ -79,9 +79,13 @@ sudo ./infra/scripts/setup-ufw.sh   # one-time: firewalls it to your LAN only
 Then pair each device. Both can be paired at the same time; that is the
 normal setup, not a workaround.
 
-**iPad (the board).** Trust the printed certificate once (Settings → General →
-VPN & Device Management), open the site in Safari, scan the pairing QR code
-shown in the terminal, and add it to your Home Screen.
+**iPad (the board).** Open `https://inkboard.local/inkboard-ca.crt` in Safari
+and continue past the certificate warning, which is expected: that is the cert
+you are about to trust. Install the profile under Settings → General → VPN &
+Device Management, then turn it on under Settings → General → About →
+Certificate Trust Settings. That last toggle is separate and easy to miss.
+Then open `https://inkboard.local`, scan the pairing QR code shown in the
+terminal, and add it to your Home Screen.
 
 **Laptop (the camera and the live view).** Open `https://inkboard.local/mirror`
 in a browser and pair it the same way. It shows the iPad's board read-only,

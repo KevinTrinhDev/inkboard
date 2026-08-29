@@ -44,14 +44,23 @@ cat <<EOF
 
 Local CA exported to: $DEST
 
-Next steps on the iPad:
-  1. AirDrop (or otherwise transfer) $DEST to the iPad.
-  2. Open it -> iOS prompts to install a Configuration Profile.
+Next steps on the iPad. The server is a Linux box, so there is no AirDrop:
+the cert is served over the already-firewalled 443 port instead.
+
+  1. Start the server:  ./infra/scripts/dev-up.sh
+  2. On the iPad, open:
+       https://${CADDY_DOMAIN:-inkboard.local}/inkboard-ca.crt
+     Safari warns that the certificate is untrusted, which is expected: it
+     is the cert you are about to trust. Continue past the warning.
+     If the .local name does not resolve, use the LAN IP instead.
+  3. iOS downloads a Configuration Profile. Install it:
      Settings -> General -> VPN & Device Management -> install it.
-  3. Enable full trust:
+  4. Enable full trust, which step 3 does NOT do on its own:
      Settings -> General -> About -> Certificate Trust Settings -> toggle ON.
-  4. Open https://${CADDY_DOMAIN:-inkboard.local} in Safari, expect a
-     trusted padlock, no warning.
+  5. Reload https://${CADDY_DOMAIN:-inkboard.local} and expect a trusted
+     padlock with no warning.
+
+The file is also at $DEST if you would rather copy it across some other way.
 
 Full detail: infra/caddy/README.md
 EOF

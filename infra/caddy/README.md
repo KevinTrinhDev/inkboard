@@ -16,7 +16,11 @@ Run `infra/scripts/setup-local-ca.sh`, which:
 
 ## Trusting the certificate on iPad
 
-1. AirDrop or otherwise transfer the exported `.crt` file to the iPad.
+1. Open `https://inkboard.local/inkboard-ca.crt` on the iPad and continue
+   past the certificate warning, which is expected: that is the cert you
+   are about to trust. The server runs on Linux, so there is no AirDrop;
+   this route exists precisely so no extra port or transfer is needed.
+   Copying the exported `.crt` across by some other means also works.
 2. Open it: iOS prompts to install a Configuration Profile.
    `Settings → General → VPN & Device Management → [inkboard CA] → Install`.
 3. Enable full trust: `Settings → General → About → Certificate Trust
