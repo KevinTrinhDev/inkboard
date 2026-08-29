@@ -143,6 +143,57 @@ export type ServerMessage = z.infer<typeof ServerMessageSchema>;
  * keeps the authoritative board so a late-joining device gets current state)
  * and by tests. Pure, so it is trivially testable.
  */
+/** An empty diff, useful as an accumulator seed. */
+export function emptyRecordsDiff(): RecordsDiff {
+  return { added: {}, updated: {}, removed: {} };
+}
+
+export function isEmptyRecordsDiff(diff: RecordsDiff): boolean {
+  return (
+    Object.keys(diff.added).length === 0 &&
+    Object.keys(diff.updated).length === 0 &&
+    Object.keys(diff.removed).length === 0
+  );
+}
+
+/**
+ * Folds `next` into `target`, mutating `target`.
+ *
+ * The editor coalesces a burst of local changes before sending, because a
+ * single pen stroke produces a change per point and one frame per point would
+ * swamp the socket. Squashing has to preserve intent: later writes win, and a
+ * record created and destroyed inside one window cancels out entirely rather
+ * than being reported as an addition the server would then have to remove.
+ */
+export function squashRecordsDiff(target: RecordsDiff, next: RecordsDiff): void {
+  for (const [id, record] of Object.entries(next.added)) {
+    delete target.removed[id];
+    target.added[id] = record;
+  }
+
+  for (const [id, pair] of Object.entries(next.updated)) {
+    delete target.removed[id];
+    if (target.added[id]) {
+      // Still an unsent addition, so fold the update into it rather than
+      // emitting an update for a record the server has never seen.
+      target.added[id] = pair[1];
+    } else {
+      const existing = target.updated[id];
+      target.updated[id] = existing ? [existing[0], pair[1]] : pair;
+    }
+  }
+
+  for (const [id, record] of Object.entries(next.removed)) {
+    if (target.added[id]) {
+      delete target.added[id];
+      delete target.updated[id];
+      continue;
+    }
+    delete target.updated[id];
+    target.removed[id] = record;
+  }
+}
+
 export function applyRecordsDiff(
   records: Record<string, SyncRecord>,
   diff: RecordsDiff,

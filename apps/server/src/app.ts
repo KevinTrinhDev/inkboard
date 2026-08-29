@@ -11,6 +11,7 @@ import { registerBoardSync } from "./ws/boardSync.js";
 import { BoardState, defaultBoardStatePath } from "./ws/boardState.js";
 import { registerUploadRoute } from "./recording/uploadRoute.js";
 import { registerSchemaRoute } from "./http/schemaRoute.js";
+import { registerAssetRoutes } from "./http/assetRoutes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -38,6 +39,8 @@ export interface BuildAppOptions {
   clientDist?: string;
   /** Where the authoritative board is persisted. Overridden in tests. */
   boardStatePath?: string;
+  /** Where pasted image/video assets are stored. Overridden in tests. */
+  assetsDir?: string;
 }
 
 /**
@@ -48,9 +51,9 @@ export async function buildApp(
   options: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
   const clientDist = options.clientDist ?? join(__dirname, "../../client/dist");
-  const boardStatePath =
-    options.boardStatePath ??
-    defaultBoardStatePath(process.env.RECORDINGS_DIR ?? "./apps/server/recordings");
+  const recordingsDir = process.env.RECORDINGS_DIR ?? "./apps/server/recordings";
+  const boardStatePath = options.boardStatePath ?? defaultBoardStatePath(recordingsDir);
+  const assetsDir = options.assetsDir ?? join(recordingsDir, "assets");
   const app = Fastify({
     logger: {
       serializers: {
@@ -98,6 +101,7 @@ export async function buildApp(
   await registerBoardSync(app, board);
   await registerUploadRoute(app);
   await registerSchemaRoute(app);
+  await registerAssetRoutes(app, assetsDir);
 
   app.get("/healthz", async () => ({ ok: true }));
 

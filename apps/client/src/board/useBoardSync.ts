@@ -1,0 +1,242 @@
+import { useEffect, useRef, useState } from "react";
+import type { Editor } from "tldraw";
+import {
+  emptyRecordsDiff,
+  isEmptyRecordsDiff,
+  ServerMessageSchema,
+  squashRecordsDiff,
+  SYNC_PROTOCOL_VERSION,
+  type ClientMessage,
+  type RecordsDiff,
+  type SyncRole,
+} from "@inkboard/shared-schema";
+
+export type SyncStatus = "connecting" | "live" | "offline";
+
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_MAX_MS = 15_000;
+
+/** Diffs are coalesced over one frame so a fast stroke is not one send per point. */
+const FLUSH_INTERVAL_MS = 50;
+
+function socketUrl(): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws`;
+}
+
+/**
+ * Mirrors the tldraw document across devices over the /ws hub.
+ *
+ * `editor` role sends local changes and applies remote ones; `mirror` is a
+ * read-only viewer. Reconnects with exponential backoff, because the laptop
+ * mirror is expected to sit open for a whole lesson while the iPad sleeps,
+ * roams between APs, or the server restarts.
+ */
+export function useBoardSync(
+  editor: Editor | null,
+  token: string | null,
+  role: SyncRole,
+  /**
+   * Called when the server rejects this credential outright (expired, or
+   * evicted once the device cap was exceeded) rather than merely dropping
+   * the connection. Without this the board sits on "Reconnecting" forever
+   * with no way to tell why or to fix it.
+   */
+  onCredentialInvalid: () => void = () => {},
+): { status: SyncStatus; peers: number } {
+  const [status, setStatus] = useState<SyncStatus>("connecting");
+  const [peers, setPeers] = useState(0);
+
+  // Kept in refs so reconnecting never re-runs the effect and tears down the
+  // editor subscription underneath itself.
+  const editorRef = useRef(editor);
+  editorRef.current = editor;
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
+  const roleRef = useRef(role);
+  roleRef.current = role;
+  const onCredentialInvalidRef = useRef(onCredentialInvalid);
+  onCredentialInvalidRef.current = onCredentialInvalid;
+
+  useEffect(() => {
+    if (!editor || !token) return;
+
+    let disposed = false;
+    let socket: WebSocket | null = null;
+    let reconnectAttempt = 0;
+    let reconnectTimer: number | undefined;
+    let flushTimer: number | undefined;
+    let unlisten: (() => void) | undefined;
+
+    /** True while applying a server diff, so we never bounce it back. */
+    let applyingRemote = false;
+    let pending = emptyRecordsDiff();
+
+    const send = (message: ClientMessage) => {
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(message));
+      }
+    };
+
+    const flush = () => {
+      if (isEmptyRecordsDiff(pending)) return;
+      const diff = pending;
+      pending = emptyRecordsDiff();
+      // tldraw's RecordsDiff and the wire RecordsDiff are the same shape.
+      send({ v: SYNC_PROTOCOL_VERSION, type: "diff", diff });
+    };
+
+    const connect = () => {
+      if (disposed) return;
+      setStatus(reconnectAttempt === 0 ? "connecting" : "offline");
+
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(socketUrl());
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+      socket = ws;
+
+      ws.onopen = () => {
+        reconnectAttempt = 0;
+        send({
+          v: SYNC_PROTOCOL_VERSION,
+          type: "hello",
+          role: roleRef.current,
+          token: tokenRef.current ?? "",
+        });
+      };
+
+      ws.onmessage = (event) => {
+        let raw: unknown;
+        try {
+          raw = JSON.parse(String(event.data));
+        } catch {
+          return;
+        }
+
+        const parsed = ServerMessageSchema.safeParse(raw);
+        if (!parsed.success) return;
+        const message = parsed.data;
+        const current = editorRef.current;
+        if (!current) return;
+
+        switch (message.type) {
+          case "welcome": {
+            setStatus("live");
+            setPeers(message.peers);
+
+            const hasRemoteBoard = Object.keys(message.records).length > 0;
+            if (hasRemoteBoard) {
+              applyingRemote = true;
+              try {
+                current.store.mergeRemoteChanges(() => {
+                  current.store.loadStoreSnapshot({
+                    store: message.records as never,
+                    schema: (message.schema ??
+                      current.store.schema.serialize()) as never,
+                  });
+                });
+              } finally {
+                applyingRemote = false;
+              }
+            } else if (roleRef.current === "editor") {
+              // Server has nothing yet: seed it from this device so a mirror
+              // joining later sees the existing board rather than a blank one.
+              const snapshot = current.store.getStoreSnapshot();
+              send({
+                v: SYNC_PROTOCOL_VERSION,
+                type: "snapshot",
+                records: snapshot.store as never,
+                schema: snapshot.schema as never,
+              });
+            }
+            break;
+          }
+
+          case "diff": {
+            applyingRemote = true;
+            try {
+              current.store.mergeRemoteChanges(() => {
+                current.store.applyDiff(message.diff as never);
+              });
+            } finally {
+              applyingRemote = false;
+            }
+            break;
+          }
+
+          case "peers":
+            setPeers(message.peers);
+            break;
+
+          case "error":
+            // Surfaced through status rather than thrown: a mirror that tries
+            // to write should not crash the board.
+            if (message.code === "unauthenticated") {
+              setStatus("offline");
+              onCredentialInvalidRef.current();
+            }
+            break;
+
+          default:
+            break;
+        }
+      };
+
+      ws.onclose = () => {
+        socket = null;
+        if (!disposed) {
+          setStatus("offline");
+          scheduleReconnect();
+        }
+      };
+
+      ws.onerror = () => {
+        // onclose always follows, which is where reconnect is handled.
+        ws.close();
+      };
+    };
+
+    const scheduleReconnect = () => {
+      if (disposed) return;
+      const delay = Math.min(
+        RECONNECT_BASE_MS * 2 ** reconnectAttempt,
+        RECONNECT_MAX_MS,
+      );
+      reconnectAttempt += 1;
+      reconnectTimer = window.setTimeout(connect, delay);
+    };
+
+    // Only local, document-scope changes go on the wire. store.listen defaults
+    // to source 'all', which would echo every diff we just applied from the
+    // server straight back to it in a loop.
+    if (role === "editor") {
+      unlisten = editor.store.listen(
+        (entry) => {
+          if (applyingRemote) return;
+          squashRecordsDiff(pending, entry.changes as unknown as RecordsDiff);
+        },
+        { source: "user", scope: "document" },
+      );
+
+      flushTimer = window.setInterval(flush, FLUSH_INTERVAL_MS);
+    }
+
+    connect();
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+      if (flushTimer !== undefined) window.clearInterval(flushTimer);
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+    // role is intentionally a dependency: switching between board and mirror
+    // must rebuild the subscription.
+  }, [editor, token, role]);
+
+  return { status, peers };
+}

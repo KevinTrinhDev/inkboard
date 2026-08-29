@@ -36,6 +36,8 @@ export interface RecordingRig {
 const MIN_FREE_BYTES = 500 * 1024 * 1024; // rough "enough room for a take"
 const MIC_ACTIVE_RMS_THRESHOLD = 0.02;
 const MIC_ACTIVE_HOLD_MS = 2000;
+// Purely informational in the checklist, so a slow cadence is plenty.
+const SERVER_PROBE_INTERVAL_MS = 5000;
 
 /**
  * Owns the camera/mic stream and every signal the pre-flight checklist
@@ -52,6 +54,13 @@ const MIC_ACTIVE_HOLD_MS = 2000;
 export function useRecordingRig(
   pairingToken: string | null,
   onCredentialInvalid: () => void = () => {},
+  /**
+   * Whether this device does the capturing. The laptop holds the camera and
+   * mic; the iPad is the drawing surface and must never be prompted for
+   * camera access it has no use for. A denied prompt on the iPad would also
+   * leave cameraError set forever on a device that was never going to record.
+   */
+  capture = true,
 ): RecordingRig {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -71,6 +80,8 @@ export function useRecordingRig(
   const recordingStartedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (!capture) return;
+
     let cancelled = false;
     let acquired: MediaStream | undefined;
 
@@ -90,7 +101,7 @@ export function useRecordingRig(
       cancelled = true;
       acquired?.getTracks().forEach((track) => track.stop());
     };
-  }, []);
+  }, [capture]);
 
   useEffect(() => {
     if (!stream || stream.getAudioTracks().length === 0) return;
@@ -169,26 +180,32 @@ export function useRecordingRig(
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [pencilReady]);
 
+  // Reachability only, deliberately not a second WebSocket. The board sync
+  // hub (useBoardSync) owns the one socket this app opens; a second one here
+  // would double-count peers and, since it authenticated via ?token= rather
+  // than the hello frame, would now be rejected outright. /healthz needs no
+  // credential, so this also keeps a stale credential from being reported as
+  // "server unreachable".
   useEffect(() => {
-    if (!pairingToken) return;
+    let cancelled = false;
 
-    const url = new URL("/ws", window.location.href);
-    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    url.searchParams.set("token", pairingToken);
-    const ws = new WebSocket(url);
-    ws.addEventListener("open", () => setServerConnected(true));
-    ws.addEventListener("close", (event) => {
-      setServerConnected(false);
-      // 4401 means the server actively rejected this credential (expired,
-      // or revoked by a newer device pairing), not just a dropped
-      // connection. Bounce back to the pairing screen instead of sitting
-      // there showing "Offline" forever with no way to tell why or fix it.
-      if (event.code === 4401) onCredentialInvalid();
-    });
-    ws.addEventListener("error", () => setServerConnected(false));
+    const probe = async () => {
+      try {
+        const res = await fetch("/healthz", { cache: "no-store" });
+        if (!cancelled) setServerConnected(res.ok);
+      } catch {
+        if (!cancelled) setServerConnected(false);
+      }
+    };
 
-    return () => ws.close();
-  }, [pairingToken, onCredentialInvalid]);
+    void probe();
+    const interval = window.setInterval(probe, SERVER_PROBE_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     if (!pairingToken) return;
