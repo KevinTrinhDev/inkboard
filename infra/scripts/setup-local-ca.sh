@@ -3,8 +3,18 @@
 # See infra/caddy/README.md for the full flow.
 set -euo pipefail
 
+# Exported for the same reason as in dev-up.sh: the Caddyfile reads
+# {$REPO_ROOT} from the environment and will not parse without it.
+export REPO_ROOT
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CADDY_DIR="$REPO_ROOT/infra/caddy"
+
+if [ -f "$REPO_ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$REPO_ROOT/.env"
+  set +a
+fi
 DATA_DIR="$CADDY_DIR/data"
 
 if ! command -v caddy >/dev/null 2>&1; then
@@ -40,7 +50,7 @@ Next steps on the iPad:
      Settings -> General -> VPN & Device Management -> install it.
   3. Enable full trust:
      Settings -> General -> About -> Certificate Trust Settings -> toggle ON.
-  4. Open https://\${CADDY_DOMAIN:-inkboard.local} in Safari - expect a
+  4. Open https://${CADDY_DOMAIN:-inkboard.local} in Safari, expect a
      trusted padlock, no warning.
 
 Full detail: infra/caddy/README.md
