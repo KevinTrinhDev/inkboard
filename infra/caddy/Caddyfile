@@ -7,6 +7,22 @@
 # running Caddy). Requires mDNS (Avahi, ships with Ubuntu) to resolve on the
 # LAN, or a static /etc/hosts entry on client devices that don't support it.
 
+# Caddy names every local CA "Caddy Local Authority - <year> ECC Root" by
+# default. Anyone who has run another Caddy project already has a profile by
+# that exact name on their iPad, with a different key, so the two are
+# indistinguishable in Settings while only one of them validates this server.
+# Naming the CA after the project makes it obvious which profile belongs to
+# inkboard, and safe to remove later.
+{
+	pki {
+		ca local {
+			name "inkboard"
+			root_cn "inkboard Local CA"
+			intermediate_cn "inkboard Local CA - Intermediate"
+		}
+	}
+}
+
 {$CADDY_DOMAIN:inkboard.local} {
 	tls internal
 

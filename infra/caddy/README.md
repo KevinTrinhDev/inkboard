@@ -16,6 +16,13 @@ Run `infra/scripts/setup-local-ca.sh`, which:
 
 ## Trusting the certificate on iPad
 
+The CA is named **inkboard Local CA**, not Caddy's default
+"Caddy Local Authority - <year> ECC Root". That default is shared by every
+Caddy project, so a device that has trusted some other Caddy server already
+has an identically named profile with a different key: indistinguishable in
+Settings, and only one of them validates this server. See the `pki` block at
+the top of the Caddyfile.
+
 1. Open `https://inkboard.local/inkboard-ca.crt` on the iPad and continue
    past the certificate warning, which is expected: that is the cert you
    are about to trust. The server runs on Linux, so there is no AirDrop;

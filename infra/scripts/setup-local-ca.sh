@@ -53,10 +53,15 @@ the cert is served over the already-firewalled 443 port instead.
      Safari warns that the certificate is untrusted, which is expected: it
      is the cert you are about to trust. Continue past the warning.
      If the .local name does not resolve, use the LAN IP instead.
-  3. iOS downloads a Configuration Profile. Install it:
-     Settings -> General -> VPN & Device Management -> install it.
+  3. iOS downloads a Configuration Profile named "inkboard Local CA".
+     Install it: Settings -> General -> VPN & Device Management.
+     The name matters: Caddy's default CA name is "Caddy Local Authority",
+     which any other Caddy project also uses, so an unrelated profile of
+     that name may already be on the device. inkboard's is named after the
+     project so the two cannot be confused.
   4. Enable full trust, which step 3 does NOT do on its own:
      Settings -> General -> About -> Certificate Trust Settings -> toggle ON.
+     Look for "inkboard Local CA" there too.
   5. Reload https://${CADDY_DOMAIN:-inkboard.local} and expect a trusted
      padlock with no warning.
 
