@@ -7,7 +7,8 @@ import fastifyRateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import { pairingRoutes } from "./pairing/pairingRoutes.js";
-import { registerSignalingStub } from "./ws/signalingStub.js";
+import { registerBoardSync } from "./ws/boardSync.js";
+import { BoardState, defaultBoardStatePath } from "./ws/boardState.js";
 import { registerUploadRoute } from "./recording/uploadRoute.js";
 import { registerSchemaRoute } from "./http/schemaRoute.js";
 
@@ -35,6 +36,8 @@ export interface BuildAppOptions {
    * needs the real bundle passes locally and fails in CI.
    */
   clientDist?: string;
+  /** Where the authoritative board is persisted. Overridden in tests. */
+  boardStatePath?: string;
 }
 
 /**
@@ -45,13 +48,16 @@ export async function buildApp(
   options: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
   const clientDist = options.clientDist ?? join(__dirname, "../../client/dist");
+  const boardStatePath =
+    options.boardStatePath ??
+    defaultBoardStatePath(process.env.RECORDINGS_DIR ?? "./apps/server/recordings");
   const app = Fastify({
     logger: {
       serializers: {
-        // The signaling socket passes the session credential as a ?token=
-        // query param, and Fastify's default request serializer logs the
-        // whole req.url. That wrote a 30-day bearer credential into the
-        // server log in cleartext on every WS connect. Log the path only.
+        // Log the path, never the query string. The socket credential now
+        // travels in the hello frame rather than ?token=, but pairing links
+        // still carry a token in the URL, and Fastify's default serializer
+        // would write it to the log in cleartext.
         req(request: FastifyRequest) {
           return {
             method: request.method,
@@ -87,7 +93,9 @@ export async function buildApp(
   await app.register(fastifyStatic, { root: clientDist });
 
   await app.register(pairingRoutes);
-  await registerSignalingStub(app);
+  const board = new BoardState(boardStatePath);
+  board.load();
+  await registerBoardSync(app, board);
   await registerUploadRoute(app);
   await registerSchemaRoute(app);
 

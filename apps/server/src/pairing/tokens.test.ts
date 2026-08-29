@@ -1,9 +1,12 @@
 import { createHmac } from "node:crypto";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  activeSessionCount,
   consumePairingNonce,
   generatePairingToken,
   generateSessionCredential,
+  MAX_ACTIVE_SESSIONS,
+  revokeAllSessions,
   verifyPairingToken,
   verifySessionCredential,
 } from "./tokens.js";
@@ -132,35 +135,63 @@ describe("verifySessionCredential", () => {
   });
 });
 
-describe("single-active-session generation invalidation", () => {
-  it("invalidates the previous credential the moment a new one is minted", () => {
-    const first = generateSessionCredential();
-    expect(verifySessionCredential(first)).toBe(true);
-
-    const second = generateSessionCredential();
-    expect(verifySessionCredential(first)).toBe(false);
-    expect(verifySessionCredential(second)).toBe(true);
+describe("multi-device sessions", () => {
+  beforeEach(() => {
+    revokeAllSessions();
   });
 
-  it("keeps only the newest of several sequential mints valid, with no grace window", () => {
-    const credentials = [
-      generateSessionCredential(),
-      generateSessionCredential(),
-      generateSessionCredential(),
-      generateSessionCredential(),
-    ];
-    const results = credentials.map((c) => verifySessionCredential(c));
-    expect(results).toEqual([false, false, false, true]);
+  it("keeps both devices valid, so the iPad and the laptop mirror coexist", () => {
+    // This is the product requirement: the iPad holds the pen and the laptop
+    // shows a read-only mirror, so pairing the second must not evict the
+    // first. The previous single-active-session model failed exactly here.
+    const ipad = generateSessionCredential();
+    const laptop = generateSessionCredential();
+
+    expect(verifySessionCredential(ipad)).toBe(true);
+    expect(verifySessionCredential(laptop)).toBe(true);
   });
 
-  it("revokes even a re-pair of the same device, since the server has no device identity concept", () => {
-    // There is nothing distinguishing "the same iPad re-pairing" from "a
-    // different device pairing" at this layer, and there shouldn't be: the
-    // whole point of the feature is "most recently paired wins," full stop.
-    const original = generateSessionCredential();
-    const rePaired = generateSessionCredential();
-    expect(verifySessionCredential(original)).toBe(false);
-    expect(verifySessionCredential(rePaired)).toBe(true);
+  it("keeps every credential valid up to the cap", () => {
+    const credentials = Array.from({ length: MAX_ACTIVE_SESSIONS }, () =>
+      generateSessionCredential(),
+    );
+
+    expect(credentials.map((c) => verifySessionCredential(c))).toEqual(
+      credentials.map(() => true),
+    );
+    expect(activeSessionCount()).toBe(MAX_ACTIVE_SESSIONS);
+  });
+
+  it("evicts the oldest credential once the cap is exceeded", () => {
+    const oldest = generateSessionCredential();
+    for (let i = 0; i < MAX_ACTIVE_SESSIONS; i += 1) {
+      generateSessionCredential();
+    }
+
+    // Dropping the least recently paired device is preferable to refusing to
+    // pair and locking the operator out of their own board.
+    expect(verifySessionCredential(oldest)).toBe(false);
+    expect(activeSessionCount()).toBe(MAX_ACTIVE_SESSIONS);
+  });
+
+  it("revokeAllSessions invalidates every outstanding credential at once", () => {
+    const ipad = generateSessionCredential();
+    const laptop = generateSessionCredential();
+    expect(verifySessionCredential(ipad)).toBe(true);
+
+    revokeAllSessions();
+
+    expect(verifySessionCredential(ipad)).toBe(false);
+    expect(verifySessionCredential(laptop)).toBe(false);
+    expect(activeSessionCount()).toBe(0);
+  });
+
+  it("does not resurrect a credential revoked before a later pairing", () => {
+    const stale = generateSessionCredential();
+    revokeAllSessions();
+    generateSessionCredential();
+
+    expect(verifySessionCredential(stale)).toBe(false);
   });
 
   it("rejects a credential missing the generation field, old-shape payloads fail closed", () => {

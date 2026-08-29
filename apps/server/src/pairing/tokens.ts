@@ -34,16 +34,52 @@ export interface SessionCredential {
 // without bound.
 const consumedNonces = new Map<string, number>();
 
-// Single-active-session enforcement: every successful pairing bumps this
-// counter and stamps the new credential with the result, so any credential
-// minted before it (a different device, or a stale re-pair of the same one)
-// stops verifying the moment a new pairing succeeds. Seeded from Date.now()
-// rather than a fixed 0/1 so a server restart can never coincidentally
-// revive a credential from a previous process's lifetime, at the cost of
-// every device needing to re-pair after any restart. That's an intentional
-// trade, not an oversight: PAIRING_TOKEN_SECRET itself has no persistence
-// guarantee across restarts either. See docs/SECURITY.md.
-let currentGeneration = Date.now();
+// inkboard is used with two devices at once: the iPad holds the pen and the
+// laptop shows a read-only mirror, so both must be paired simultaneously.
+// The previous model bumped a single counter on every mint and required an
+// exact match, which meant pairing the laptop silently revoked the iPad.
+//
+// Instead, credentials are stamped with an epoch and tracked individually:
+//  - `currentEpoch` changes only on an explicit revokeAllSessions(), so
+//    "kick every device" is still one call.
+//  - `activeSessions` holds the nonce of every live credential, capped, so a
+//    forgotten device cannot accumulate credentials without bound and the
+//    oldest is evicted first.
+//  - Both live in memory only, so a restart still invalidates everything, as
+//    PAIRING_TOKEN_SECRET has no persistence guarantee either.
+// See docs/SECURITY.md.
+let currentEpoch = Date.now();
+
+/**
+ * Cap on simultaneously paired devices. Two is the real use case (iPad plus
+ * laptop mirror); the headroom covers re-pairing a device without having to
+ * explicitly revoke first.
+ */
+export const MAX_ACTIVE_SESSIONS = 4;
+
+/** sessionNonce -> issuedAt, for every credential currently considered live. */
+const activeSessions = new Map<string, number>();
+
+function evictExpiredSessions(now: number): void {
+  for (const [nonce, issuedAt] of activeSessions) {
+    if (now - issuedAt > SESSION_TTL_MS) activeSessions.delete(nonce);
+  }
+}
+
+/**
+ * Invalidates every credential issued so far. The epoch bump means even a
+ * credential whose nonce somehow survived stops verifying.
+ */
+export function revokeAllSessions(): void {
+  activeSessions.clear();
+  currentEpoch = Date.now() + 1;
+}
+
+/** Number of devices currently holding a valid credential. */
+export function activeSessionCount(): number {
+  evictExpiredSessions(Date.now());
+  return activeSessions.size;
+}
 
 function evictExpiredNonces(now: number): void {
   for (const [nonce, expiresAt] of consumedNonces) {
@@ -123,11 +159,32 @@ export function verifyPairingToken(token: string): boolean {
  * the same step. There is no separate revocation list to maintain.
  */
 export function generateSessionCredential(): string {
-  currentGeneration += 1;
+  const now = Date.now();
+  evictExpiredSessions(now);
+
+  // Evict the oldest rather than refusing to pair: being locked out of your
+  // own board because of stale entries is a worse failure than dropping the
+  // least recently paired device.
+  while (activeSessions.size >= MAX_ACTIVE_SESSIONS) {
+    let oldestNonce: string | undefined;
+    let oldestAt = Infinity;
+    for (const [nonce, issuedAt] of activeSessions) {
+      if (issuedAt < oldestAt) {
+        oldestAt = issuedAt;
+        oldestNonce = nonce;
+      }
+    }
+    if (!oldestNonce) break;
+    activeSessions.delete(oldestNonce);
+  }
+
+  const sessionNonce = randomBytes(16).toString("hex");
+  activeSessions.set(sessionNonce, now);
+
   const credential: SessionCredential = {
-    sessionNonce: randomBytes(16).toString("hex"),
-    issuedAt: Date.now(),
-    generation: currentGeneration,
+    sessionNonce,
+    issuedAt: now,
+    generation: currentEpoch,
   };
   const payloadB64 = Buffer.from(JSON.stringify(credential)).toString("base64url");
   const signature = signSession(payloadB64);
@@ -151,8 +208,10 @@ export function verifySessionCredential(token: string): boolean {
     return (
       typeof decoded.issuedAt === "number" &&
       typeof decoded.generation === "number" &&
+      typeof decoded.sessionNonce === "string" &&
       Date.now() - decoded.issuedAt <= SESSION_TTL_MS &&
-      decoded.generation === currentGeneration
+      decoded.generation === currentEpoch &&
+      activeSessions.has(decoded.sessionNonce)
     );
   } catch {
     return false;

@@ -68,7 +68,7 @@ describe("POST /api/pair", () => {
     expect(second.statusCode).toBe(401);
   });
 
-  it("revokes the first device's credential the moment a second device pairs", async () => {
+  it("lets a second device pair without kicking the first one off", async () => {
     const firstPairingToken = generatePairingToken();
     const firstRes = await app.inject({
       method: "POST",
@@ -86,8 +86,10 @@ describe("POST /api/pair", () => {
     });
     const secondCredential = secondRes.json().credential;
 
-    // The whole point: pairing a new device silently kicks the old one off.
-    expect(verifySessionCredential(firstCredential)).toBe(false);
+    // The iPad draws and the laptop mirrors, so both have to hold a live
+    // credential at the same time. This previously asserted the opposite,
+    // back when pairing a second device silently revoked the first.
+    expect(verifySessionCredential(firstCredential)).toBe(true);
     expect(verifySessionCredential(secondCredential)).toBe(true);
   });
 });
