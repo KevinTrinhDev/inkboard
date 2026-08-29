@@ -11,7 +11,7 @@
     <style>
       /* overflow/overscroll here stop Safari's own page bounce/scroll from
          fighting the canvas; they don't affect tap/click. touch-action:none
-         is intentionally NOT set globally — WebKit has a real, documented
+         is intentionally NOT set globally, because WebKit has a real, documented
          quirk where touch-action:none on an ancestor can suppress tap-to-
          click on buttons/etc. inside it. It's scoped to just the drawing
          canvas instead, in BoardCanvas.tsx, so toolbar buttons stay tappable

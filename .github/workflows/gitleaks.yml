@@ -2,23 +2,48 @@ name: gitleaks
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+# A PR branch push previously triggered this workflow twice (once for `push`,
+# once for `pull_request`) with nothing to supersede the older run. During the
+# 2026-08-26 Actions runner shortage those duplicates piled up: one queued for
+# 58 hours before being cancelled, and two more were failed by the scheduler
+# with zero steps executed, leaving PR #4 red on a scan that had found nothing.
+# Limiting `push` to main removes the duplicate, and the concurrency group
+# cancels a superseded run instead of letting it sit in the queue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       # Scans the full repo history unconditionally rather than diffing
-      # against the push event's before/after SHAs — gitleaks-action's
+      # against the push event's before/after SHAs, because gitleaks-action's
       # range-diff mode fails with "unknown revision" on a repo's very
       # first push (the root commit has no parent to diff from).
       - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.24.3
+          GITLEAKS_SHA256: 9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c
         run: |
-          curl -sSfL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
+          set -euo pipefail
+          # --retry covers the transient download failures seen during the
+          # same runner incident; the checksum pins what we actually execute.
+          curl -sSfL --retry 5 --retry-delay 2 --retry-all-errors \
+            -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz gitleaks
           sudo mv gitleaks /usr/local/bin/gitleaks
 

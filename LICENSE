@@ -25,4 +25,4 @@ SOFTWARE.
 Note: this repository bundles or references third-party fonts and assets
 under their own licenses (e.g. Playpen Sans under the SIL Open Font License
 1.1). Those licenses apply to those assets independently of the MIT license
-above — see docs/ARCHITECTURE.md for details.
+above. See docs/ARCHITECTURE.md for details.

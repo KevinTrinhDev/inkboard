@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # No `version:` here — pnpm/action-setup reads it from package.json's
+      # No `version:` here, because pnpm/action-setup reads it from package.json's
       # "packageManager" field. Pinning both causes ERR_PNPM_BAD_PM_VERSION.
       - uses: pnpm/action-setup@v4
 

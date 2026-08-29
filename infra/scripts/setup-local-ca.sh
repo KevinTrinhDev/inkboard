@@ -23,7 +23,7 @@ wait "$CADDY_PID" 2>/dev/null || true
 
 CA_CERT="$DATA_DIR/caddy/pki/authorities/local/root.crt"
 if [ ! -f "$CA_CERT" ]; then
-  echo "Expected CA cert not found at $CA_CERT — check Caddy's output above." >&2
+  echo "Expected CA cert not found at $CA_CERT, check Caddy's output above." >&2
   exit 1
 fi
 
