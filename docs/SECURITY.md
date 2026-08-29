@@ -51,7 +51,8 @@ inbound port forwarding.
 - Tokens are signed/verified using `PAIRING_TOKEN_SECRET` (see `.env.example`),
   generate a real value with `openssl rand -hex 32` and never commit it.
 - A device that doesn't present a valid token cannot open the board, connect
-  to the signaling WebSocket, or upload/read session data.
+  to the board sync WebSocket, upload or read session data, or store or fetch
+  a pasted asset.
 - Pairing (`POST /api/pair`) is separate from the credential used afterward:
   the scanned QR token is short-lived (5 minutes, single-use for pairing
   itself) but the credential it exchanges for is a distinct, longer-lived
@@ -59,22 +60,55 @@ inbound port forwarding.
   neither can be replayed as the other. This split exists specifically so an
   offline recording session (see below) can still authenticate an upload
   hours or days later without forcing a re-pair.
-- **Only one device's credential is ever valid at a time, enforced server-side.**
-  Every successful pairing bumps an in-memory generation counter and stamps
-  the new credential with it; any credential minted before that point stops
-  verifying immediately, whether it belonged to a different device or the
-  same one re-pairing. This is an active guarantee (`tokens.ts`'s
-  `currentGeneration` check), not just a documented convention. Two
-  consequences worth knowing:
-  - If a device has an offline recording still queued for upload when a new
-    (or the same) device is re-paired, that queued upload will 401 once the
-    new pairing completes. Let any pending offline recording finish
-    uploading before re-pairing, or expect to retry the upload manually
-    after re-pairing that device again.
-  - Restarting the server invalidates every existing credential, since the
-    generation counter is in-memory and reseeds on boot. Every device must
-    re-pair after a server restart. This is intentional: `PAIRING_TOKEN_SECRET`
-    itself has no persistence guarantee across restarts either.
+- **Several devices can be paired at once, up to a fixed cap, enforced
+  server-side.** The two-device setup is the normal case: the iPad holds the
+  pen and the laptop shows the mirror, so both need a live credential at the
+  same time. Each credential is tracked individually against an in-memory
+  epoch (`tokens.ts`'s `activeSessions` map plus `currentEpoch`), capped at
+  `MAX_ACTIVE_SESSIONS`. Pairing beyond the cap evicts the least recently
+  paired device rather than refusing, because being locked out of your own
+  board is a worse failure than dropping a stale device. Three consequences
+  worth knowing:
+  - `revokeAllSessions()` invalidates every outstanding credential in one
+    call. It bumps the epoch as well as clearing the map, so a credential
+    cannot be revived even if its nonce were somehow replayed.
+  - Restarting the server invalidates every existing credential, since both
+    the epoch and the map are in-memory. Every device must re-pair after a
+    server restart. This is intentional: `PAIRING_TOKEN_SECRET` itself has no
+    persistence guarantee across restarts either.
+  - If a device has an offline recording still queued for upload when it gets
+    evicted by the cap, that queued upload will 401. Re-pair that device and
+    the queued upload retries on its own.
+
+  This replaced an earlier single-active-session rule, where every pairing
+  bumped a counter that verification required an exact match on. That rule
+  made the product impossible: pairing the laptop silently revoked the iPad.
+
+### Board sync socket
+
+- The session credential is sent in the socket's first `hello` frame, never
+  as a `?token=` query parameter. A query string is recorded by every
+  intermediary that logs a URL, including Caddy's access log, so carrying a
+  30-day bearer credential there would leak it well outside this application.
+  The hub never logs frame contents for the same reason.
+- A socket that does not authenticate within 10 seconds is closed.
+- Roles are enforced on the server, not requested by the client in good
+  faith: a `mirror` connection is refused if it sends a board mutation, so a
+  tampered-with or buggy laptop cannot corrupt the board being drawn on.
+- Frames are capped at 8 MB and validated against the shared zod protocol
+  before anything acts on them.
+
+### Pasted assets
+
+- `POST /api/assets` requires a valid session credential.
+- Accepted media types are an allowlist. **SVG is deliberately excluded**: it
+  is script-capable, and an SVG served same-origin and rendered on the board
+  would be stored XSS against the board itself.
+- Uploads are bounded by a streaming byte counter, not just `content-length`,
+  because a chunked upload sends no `content-length` at all.
+- Asset ids are server-generated. A request for anything that is not a
+  well-formed generated id is rejected before touching the filesystem, and
+  responses carry `X-Content-Type-Options: nosniff`.
 
 ## Offline recording
 

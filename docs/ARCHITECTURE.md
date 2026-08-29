@@ -69,6 +69,80 @@ What it buys us:
    └─────────────────────────┘
 ```
 
+## Two-device setup
+
+inkboard runs on two devices at once, with a deliberate split of jobs.
+
+| | iPad | Laptop |
+|---|---|---|
+| Opens | `/` | `/mirror` |
+| Sync role | `editor` | `mirror` (read-only) |
+| Camera and mic | none requested | owns them |
+| Can draw | yes | no |
+
+The iPad is the drawing surface and nothing else. It is never prompted for
+camera access, because it has no use for it and a denied prompt would leave
+an error state on a device that was never going to record.
+
+The laptop already has a camera and a microphone, so it does the capturing
+and shows the board live while it records. Its view is read-only, enforced on
+the server rather than merely hidden in the UI: a `mirror` connection that
+sends a board mutation is refused. That means a buggy or tampered-with laptop
+cannot corrupt the board the iPad is actively drawing on.
+
+### How the board actually moves
+
+The server holds the authoritative board, rather than blindly relaying frames
+between peers. That single decision is what makes a device joining late, or
+reconnecting after the iPad slept, receive the current canvas instead of a
+blank one.
+
+```
+iPad (editor)                 server                    laptop (mirror)
+  |                             |                             |
+  |-- hello {role, token} ----->|                             |
+  |<-- welcome {records} -------|                             |
+  |                             |<---- hello {role, token} ---|
+  |                             |----- welcome {records} ---->|
+  |                             |                             |
+  |-- diff (coalesced 50ms) --->|                             |
+  |                        apply to board                     |
+  |                             |------------ diff ---------->|
+```
+
+Local changes are subscribed with `{ source: "user", scope: "document" }`.
+This matters: tldraw's `store.listen` defaults to `source: "all"`, so an
+unfiltered listener would send every diff it had just applied from the server
+straight back to it, forever. Incoming diffs are applied inside
+`store.mergeRemoteChanges` for the same reason.
+
+Diffs are coalesced over 50ms before sending, because a single pen stroke
+emits a change per point and one frame per point would swamp the socket. The
+coalescing preserves intent rather than just concatenating: a record created
+and destroyed inside one window cancels out instead of being sent as an
+addition the server would then have to remove.
+
+Board records cross the wire opaquely, validated only as "an object with a
+string id". The relay moves and stores board state without understanding
+tldraw's schema, so a tldraw upgrade that changes record internals cannot
+break the server, and the same relay would carry a different canvas library
+later. tldraw's serialized schema rides alongside the records so a saved
+board stays migratable.
+
+The board is persisted to a single JSON file with debounced, write-then-rename
+saves. A crash mid-write leaves the previous good file rather than a truncated
+one, and a corrupt or missing file is non-fatal: starting empty beats refusing
+to boot.
+
+### Pasted images
+
+tldraw's default asset store inlines files as base64 data URLs. That is fine
+on one device and wrong on two: the data URL would bloat every board diff by
+the whole file, and the record would still only render on the device where it
+was pasted. Assets are instead uploaded once to the server and referenced by
+a short same-origin URL, which is what makes "paste on the laptop, see it on
+the iPad" work.
+
 ## Decisions and why
 
 ### Canvas engine: tldraw SDK, not a custom engine

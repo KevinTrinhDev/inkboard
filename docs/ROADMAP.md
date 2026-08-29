@@ -17,9 +17,28 @@ UI/UX, additional use cases) layered on top of these milestones, see
 **Done when:** the verification steps in the plan/PR all pass on the actual
 iPad + XPS hardware, not just `localhost`.
 
+## M0.5: Two-device board (done)
+
+- Real board sync over `/ws`, replacing the M0 signaling stub that only logged
+  what it received. Server-authoritative board, persisted across restarts.
+- The laptop opens `/mirror` for a read-only live view and owns the camera and
+  mic; the iPad is the drawing surface. See ARCHITECTURE.md "Two-device setup".
+- Pasted images upload to the server and sync as URLs, so an image dropped on
+  one device appears on the other.
+- Pairing supports several simultaneous devices. The previous
+  single-active-session rule made the two-device setup impossible: pairing the
+  laptop silently revoked the iPad.
+
+**Done when:** a stroke on the iPad appears on the laptop mirror, a pasted
+image crosses in the other direction, and both survive a sleep, a reconnect
+and a server restart. Verified against the running server; still needs a pass
+on real iPad hardware.
+
 ## M1: Live recording pipeline
-- Replace `MediaRecorder`-upload with real WebRTC P2P (iPad ↔ XPS) so camera
-  and mic are captured live, synchronized with the journal timeline.
+- Replace `MediaRecorder`-upload with real WebRTC P2P so camera and mic are
+  captured live, synchronized with the journal timeline. Note the capture now
+  happens on the laptop, not the iPad, so this is a same-machine pipeline
+  rather than a cross-device one.
 - Persist the journal to disk per session; store camera/mic as their original
   tracks, untouched, alongside it.
 - A first compositing/render pass: vector board + facecam → an MP4 master.

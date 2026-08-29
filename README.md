@@ -15,10 +15,16 @@
 
 ## What it is
 
-You draw on an **iPad** with Apple Pencil while a facecam records you. The
-**laptop** (any always-on Linux machine on your home network) is the quiet
-brain: it stores what you record and, later, adds AI transcription. No
-cloud, ever: the two just talk to each other over your own WiFi.
+Two devices, one board.
+
+- The **iPad** is the drawing surface. You write on it with Apple Pencil and
+  nothing else: no camera prompt, no chrome in the way.
+- The **laptop** runs the server, holds the camera and mic, and opens
+  `/mirror` to watch the iPad's board live while it records you.
+
+Whatever you draw on the iPad appears on the laptop as you draw it, and an
+image pasted on the laptop shows up on the iPad. Everything stays on your own
+WiFi; there is no cloud, and the server is never exposed to the internet.
 
 The board itself is never a picture. Every stroke, word, and equation is
 saved as *data* (`TEXT "F = ma"`, not a photo of "F = ma"), so it can be
@@ -70,9 +76,25 @@ sudo ./infra/scripts/setup-ufw.sh   # one-time: firewalls it to your LAN only
 ./infra/scripts/dev-up.sh           # starts everything
 ```
 
-Then on the iPad: trust the printed certificate once (Settings → General →
+Then pair each device. Both can be paired at the same time; that is the
+normal setup, not a workaround.
+
+**iPad (the board).** Trust the printed certificate once (Settings → General →
 VPN & Device Management), open the site in Safari, scan the pairing QR code
 shown in the terminal, and add it to your Home Screen.
+
+**Laptop (the camera and the live view).** Open `https://inkboard.local/mirror`
+in a browser and pair it the same way. It shows the iPad's board read-only,
+with the camera preview and the record button. Drawing is disabled there on
+purpose: the iPad holds the pen.
+
+A status pill in the top-left of both devices says whether they are actually
+talking to each other (`Live`, `Connecting`, `Reconnecting`) and how many
+devices are connected. If a device sleeps or WiFi drops it reconnects on its
+own and is handed the current board, so nothing is lost.
+
+To put an image on the board, paste or drop it on either device. It uploads to
+the server once and appears on the other device.
 
 Full steps: [docs/SECURITY.md](docs/SECURITY.md) and
 [infra/caddy/README.md](infra/caddy/README.md).
@@ -86,7 +108,7 @@ Full steps: [docs/SECURITY.md](docs/SECURITY.md) and
 ## Repo layout
 
 ```
-apps/client/       iPad-facing app (Vite + React + tldraw)
+apps/client/       the app both devices open (Vite + React + tldraw)
 apps/server/       server that runs on the laptop (Fastify)
 packages/shared-schema/   the shared data format both sides speak
 infra/              Caddy config, firewall setup, dev scripts
