@@ -13,6 +13,8 @@ export interface PreflightState {
 export interface RecordingRig {
   stream: MediaStream | null;
   cameraError: string | null;
+  /** Non-null when the last take failed to encrypt or queue and was lost. */
+  saveError: string | null;
   preflight: PreflightState;
   readyToRecord: boolean;
   isRecording: boolean;
@@ -23,9 +25,14 @@ export interface RecordingRig {
   toggleRecording: () => void;
 }
 
-// One id per app load: a "session" is one continuous recording take (or a
-// board opened to draw on). Real multi-take session management is M1.
-const SESSION_ID = crypto.randomUUID();
+// A "session" is one continuous recording take, so the id has to be minted
+// per take rather than per app load. It used to be a module-level constant
+// shared by every take, and the offline queue is keyed on it
+// (offlineQueue.ts createObjectStore(..., { keyPath: "sessionId" })), so
+// IndexedDB `put` silently replaced the previous take: record segment one
+// with the network down, record segment two, and segment one was gone with
+// no error and the pending count still reading 1. The server collided the
+// same way, writing every take to the same `${id}.webm.enc` path.
 const MIN_FREE_BYTES = 500 * 1024 * 1024; // rough "enough room for a take"
 const MIC_ACTIVE_RMS_THRESHOLD = 0.02;
 const MIC_ACTIVE_HOLD_MS = 2000;
@@ -56,6 +63,9 @@ export function useRecordingRig(
   const [elapsedMs, setElapsedMs] = useState(0);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [previewVisible, setPreviewVisible] = useState(true);
+  // Set when a take fails to encrypt or queue, so a lost recording is not
+  // indistinguishable from a saved one. See toggleRecording's catch.
+  const [saveError, setSaveError] = useState<string | null>(null);
   const captureRef = useRef<MediaRecorderCapture | null>(null);
   const syncRef = useRef<ReturnType<typeof startSyncLoop> | null>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
@@ -86,6 +96,28 @@ export function useRecordingRig(
     if (!stream || stream.getAudioTracks().length === 0) return;
 
     const audioCtx = new AudioContext();
+
+    // iOS Safari starts an AudioContext constructed outside a user gesture in
+    // the "suspended" state and leaves it there. A suspended analyser reports
+    // a flat 128 for every sample, so rms is always 0, micActive never turns
+    // true, and readyToRecord below is false forever: on a real iPad the
+    // operator sits in front of a preflight checklist that can never go
+    // green. Resume immediately (sufficient on desktop) and again on the
+    // first genuine user gesture, which is the only point iOS honours it.
+    const resumeAudio = () => {
+      if (audioCtx.state === "suspended") {
+        void audioCtx.resume().catch(() => {
+          // Nothing useful to do: the next gesture gets another attempt.
+        });
+      }
+    };
+    resumeAudio();
+
+    const GESTURES = ["pointerdown", "touchend", "keydown"] as const;
+    for (const gesture of GESTURES) {
+      window.addEventListener(gesture, resumeAudio, { passive: true });
+    }
+
     const source = audioCtx.createMediaStreamSource(stream);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 512;
@@ -110,6 +142,9 @@ export function useRecordingRig(
 
     return () => {
       cancelAnimationFrame(rafId);
+      for (const gesture of GESTURES) {
+        window.removeEventListener(gesture, resumeAudio);
+      }
       source.disconnect();
       void audioCtx.close();
     };
@@ -215,7 +250,23 @@ export function useRecordingRig(
     if (!stream || !pairingToken) return;
 
     if (isRecording) {
-      void captureRef.current?.stop().then(() => syncRef.current?.flushNow());
+      // stop() can reject at key access (IndexedDB blocked in private
+      // browsing), at encryption, or at enqueue (storage quota, very
+      // plausible for a GB-scale take). Without this catch the rejection was
+      // unhandled, the take was discarded, and the UI still showed a clean
+      // stop, so a lost recording looked exactly like a saved one.
+      void captureRef.current
+        ?.stop()
+        .then(() => {
+          setSaveError(null);
+          syncRef.current?.flushNow();
+        })
+        .catch((err: unknown) => {
+          console.error("inkboard: recording failed to save", err);
+          setSaveError(
+            err instanceof Error ? err.message : "Recording failed to save.",
+          );
+        });
       captureRef.current = null;
       recordingStartedAtRef.current = null;
       setIsRecording(false);
@@ -223,7 +274,7 @@ export function useRecordingRig(
       return;
     }
 
-    const capture = new MediaRecorderCapture(stream, SESSION_ID);
+    const capture = new MediaRecorderCapture(stream, crypto.randomUUID());
     capture.start();
     captureRef.current = capture;
     recordingStartedAtRef.current = Date.now();
@@ -238,6 +289,7 @@ export function useRecordingRig(
   return {
     stream,
     cameraError,
+    saveError,
     preflight,
     readyToRecord,
     isRecording,

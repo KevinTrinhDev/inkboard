@@ -1,0 +1,103 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import fastifyHelmet from "@fastify/helmet";
+import fastifyRateLimit from "@fastify/rate-limit";
+import fastifyStatic from "@fastify/static";
+import fastifyWebsocket from "@fastify/websocket";
+import { pairingRoutes } from "./pairing/pairingRoutes.js";
+import { registerSignalingStub } from "./ws/signalingStub.js";
+import { registerUploadRoute } from "./recording/uploadRoute.js";
+import { registerSchemaRoute } from "./http/schemaRoute.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** Prefixes that must keep answering with a real 404 instead of the SPA shell. */
+const API_PREFIXES = ["/api/", "/ws", "/healthz"];
+
+/** The path portion of a request URL, with any query string removed. */
+function pathOf(url: string): string {
+  const [path] = url.split("?");
+  return path ?? url;
+}
+
+function isApiPath(url: string): boolean {
+  const path = pathOf(url);
+  return API_PREFIXES.some((prefix) => path === prefix || path.startsWith(prefix));
+}
+
+/**
+ * Builds the fully configured server without listening, so tests can drive it
+ * through app.inject() instead of binding a port.
+ */
+export async function buildApp(): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: {
+      serializers: {
+        // The signaling socket passes the session credential as a ?token=
+        // query param, and Fastify's default request serializer logs the
+        // whole req.url. That wrote a 30-day bearer credential into the
+        // server log in cleartext on every WS connect. Log the path only.
+        req(request: FastifyRequest) {
+          return {
+            method: request.method,
+            url: pathOf(request.url),
+            hostname: request.hostname,
+            remoteAddress: request.ip,
+          };
+        },
+      },
+    },
+  });
+
+  // Global default is generous: this is a LAN personal server, not a public
+  // API. The meaningful limit is the tighter per-route one on /api/pair.
+  await app.register(fastifyRateLimit, { max: 200, timeWindow: "1 minute" });
+
+  await app.register(fastifyHelmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        // tldraw and KaTeX both set inline element styles at runtime.
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        mediaSrc: ["'self'", "blob:"],
+        // wss: only: the app is always served over HTTPS via Caddy, so a
+        // plain ws: connection should never be attempted or allowed.
+        connectSrc: ["'self'", "wss:"],
+      },
+    },
+  });
+
+  await app.register(fastifyWebsocket);
+  await app.register(fastifyStatic, {
+    root: join(__dirname, "../../client/dist"),
+    // Fastify's ready check fails loudly if the client hasn't been built
+    // yet; that's intentional feedback during setup, not a bug.
+  });
+
+  await app.register(pairingRoutes);
+  await registerSignalingStub(app);
+  await registerUploadRoute(app);
+  await registerSchemaRoute(app);
+
+  app.get("/healthz", async () => ({ ok: true }));
+
+  // The startup QR encodes /pair?token=..., but the client is a single-page
+  // app served as static files, so no /pair file exists on disk and Fastify
+  // answered the QR's own URL with a 404, breaking pairing end to end.
+  // Serve the SPA shell for non-API GETs instead. PairingGate reads ?token=
+  // from window.location.search, which this rewrite preserves.
+  app.setNotFoundHandler((request, reply) => {
+    if (request.method !== "GET" || isApiPath(request.url)) {
+      return reply.code(404).send({
+        error: "Not Found",
+        message: `Route ${request.method}:${pathOf(request.url)} not found`,
+        statusCode: 404,
+      });
+    }
+    return reply.sendFile("index.html");
+  });
+
+  return app;
+}

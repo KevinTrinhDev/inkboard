@@ -24,6 +24,28 @@ function AppShell() {
           <CameraPreview stream={rig.stream} error={rig.cameraError} />
         </div>
       )}
+      {/* A take that failed to encrypt or queue is gone, so say so loudly
+          rather than letting a lost recording look like a saved one. */}
+      {rig.saveError && (
+        <div
+          role="alert"
+          style={{
+            position: "fixed",
+            bottom: 12,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1001,
+            maxWidth: "min(90vw, 480px)",
+            padding: "10px 14px",
+            borderRadius: 8,
+            background: "rgba(180, 32, 32, 0.94)",
+            color: "#fff",
+            font: "500 13px/1.4 system-ui, sans-serif",
+          }}
+        >
+          Recording was not saved: {rig.saveError}
+        </div>
+      )}
     </>
   );
 }
