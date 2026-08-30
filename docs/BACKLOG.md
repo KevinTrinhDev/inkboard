@@ -27,10 +27,15 @@ bugs, both fixed and confirmed live:
   it. Fixed in `apps/client/index.html`.
 - **`inkboard.local` never resolved at all.** Avahi publishes the machine's actual hostname
   (`<hostname>.local`), not an arbitrary alias: nothing had configured `inkboard.local` as
-  an mDNS alias, so every attempt just hung. Worked around by pointing `CADDY_DOMAIN` at the
-  LAN IP directly instead (`192.168.1.88`), which needs no name resolution at all. A real
-  fix (an `/etc/avahi/hosts` alias, or a router DHCP reservation + proper mDNS config) is
-  still open: see "Next" below.
+  an mDNS alias, so every attempt just hung. Previously worked around by pointing
+  `CADDY_DOMAIN` at a hard-coded LAN IP, which then went stale when DHCP moved the machine:
+  the address in this note (`192.168.1.88`) is no longer the server and answers nothing.
+  **Fixed properly:** `infra/scripts/dev-up.sh` now publishes the alias itself with
+  `avahi-publish -a -R "$CADDY_DOMAIN" "$(hostname -I | awk '{print $1}')"` for as long as
+  the server runs, using the live address, so it keeps working across DHCP changes. It
+  requires `avahi-utils` (`sudo apt install avahi-utils`); without it the script says so and
+  falls back to telling you the current LAN IP, which the Caddyfile now also serves a
+  certificate for.
 
 **Security fixes found during a real audit pass**: all confirmed live via `ss -tlnp` and
 `curl` before/after:

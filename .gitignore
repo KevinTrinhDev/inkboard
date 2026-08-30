@@ -6,6 +6,7 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
+.inkboard-build-stamp
 
 # env / secrets
 .env
@@ -28,6 +29,9 @@ services/*/__pycache__/
 services/*/venv/
 services/*/.venv/
 services/*/*.egg-info/
+
+# nested git worktrees (a full second copy of the repo)
+.claude/worktrees/
 
 # editors / os
 .DS_Store

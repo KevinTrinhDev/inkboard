@@ -23,7 +23,14 @@
 	}
 }
 
-{$CADDY_DOMAIN:inkboard.local} {
+# Both names are served. The .local name is the one everything points at,
+# but it depends on mDNS, and when that is unavailable the docs tell the
+# operator to "use the LAN IP instead" - which used to fail the TLS handshake
+# outright, because this block matched only the host name and the automation
+# policy issued a cert only for it. Listing the IP as a second site subject
+# makes the documented fallback real: Caddy's internal issuer mints a cert
+# with the IP in a SAN.
+{$CADDY_DOMAIN:inkboard.local}, {$CADDY_LAN_IP:127.0.0.1} {
 	tls internal
 
 	# TEMPORARY: serves the local CA cert itself over the already-firewalled
@@ -31,6 +38,12 @@
 	# port. Remove this block once the cert has been trusted on-device.
 	handle /inkboard-ca.crt {
 		root * {$REPO_ROOT}
+		# The file on disk is PEM, but Caddy sniffs .crt as
+		# application/pkix-cert, which denotes DER. iOS is picky about this on
+		# the "Profile Downloaded" path: with the wrong type Safari may drop
+		# the file into Files instead of offering to install a profile, which
+		# silently breaks the very first step of iPad setup.
+		header Content-Type application/x-x509-ca-cert
 		file_server
 	}
 
