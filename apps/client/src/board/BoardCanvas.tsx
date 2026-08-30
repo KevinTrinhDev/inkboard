@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Tldraw, type Editor, type TLComponents } from "tldraw";
+import { getAssetUrlsByMetaUrl } from "@tldraw/assets/urls";
 import "tldraw/tldraw.css";
 import { TextShapeUtil } from "./shapes/TextShapeUtil";
 import { MathShapeUtil } from "./shapes/MathShapeUtil";
@@ -17,6 +18,23 @@ import { useForgetPairingToken, usePairingToken } from "../pairing/PairingGate";
 // path that has to feel instant under an Apple Pencil, so it deliberately
 // carries no custom logic. See docs/ARCHITECTURE.md "Canvas engine".
 const shapeUtils = [TextShapeUtil, MathShapeUtil, ArrowShapeUtil, RoughShapeUtil];
+
+/**
+ * tldraw's own icons, fonts and translations, bundled into our build instead
+ * of fetched from cdn.tldraw.com at runtime.
+ *
+ * By default tldraw loads them from its CDN. That is wrong here twice over:
+ * the app's whole premise is that it works on a LAN with no internet and that
+ * nothing leaves your home network (see docs/SECURITY.md), and the server's
+ * own Content-Security-Policy allows only 'self', so those requests were
+ * blocked outright. Real symptom: a stream of
+ * "EncodingError: The source image cannot be decoded" on both devices and
+ * missing icons in tldraw's built-in UI.
+ *
+ * getAssetUrlsByMetaUrl() resolves every asset through `import.meta.url`, so
+ * Vite fingerprints them into dist/ and they are served from our own origin.
+ */
+const assetUrls = getAssetUrlsByMetaUrl();
 
 const tools = [
   createShapeTool("inkboard-text", "inkboard-text"),
@@ -60,6 +78,24 @@ export function BoardCanvas() {
       if (role === "mirror") {
         mounted.updateInstanceState({ isReadonly: true });
       }
+
+      // Always start a session with palm rejection off.
+      //
+      // tldraw latches `isPenMode` the first time it sees a `pointerType:
+      // "pen"` event, and from then on ignores touch input for drawing. That
+      // is correct behaviour with a real Apple Pencil (it lets you rest your
+      // hand on the glass), but it is a trap for any third-party stylus:
+      // those are indistinguishable from a finger, so they arrive as "touch"
+      // and stop drawing entirely once pen mode is on. Since instance state
+      // is persisted per device, a single stray pen event could leave the
+      // board permanently unresponsive to the stylus with no visible cause
+      // and no obvious way back.
+      //
+      // Resetting on mount keeps within-session palm rejection for an actual
+      // Apple Pencil while guaranteeing that reloading the page always
+      // restores a board that a plain stylus can draw on.
+      mounted.updateInstanceState({ isPenMode: false });
+
       setEditor(mounted);
     },
     [role],
@@ -76,6 +112,7 @@ export function BoardCanvas() {
         shapeUtils={shapeUtils}
         tools={tools}
         components={role === "mirror" ? mirrorComponents : editorComponents}
+        assetUrls={assetUrls}
         assets={assets}
         onMount={handleMount}
       />

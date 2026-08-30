@@ -41,10 +41,20 @@ export function pickSupportedMimeType(): string | undefined {
   return MIME_CANDIDATES.find((type) => MediaRecorder.isTypeSupported(type));
 }
 
+/**
+ * How often MediaRecorder hands back a chunk. Without a timeslice it fires
+ * ondataavailable exactly once, at stop(), so nothing at all exists until the
+ * take ends and any crash loses 100% of it. A periodic flush also keeps each
+ * individual Blob small.
+ */
+const TIMESLICE_MS = 5000;
+
 export class MediaRecorderCapture {
   private recorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
   private mimeType: string | undefined;
+  /** Set if the recorder itself errored, so stop() can report it. */
+  private recorderError: Error | null = null;
 
   constructor(
     private readonly stream: MediaStream,
@@ -62,18 +72,49 @@ export class MediaRecorderCapture {
     this.recorder.ondataavailable = (event) => {
       if (event.data.size > 0) this.chunks.push(event.data);
     };
-    this.recorder.start();
+    // Without this, an encoder failure or a camera yanked mid-take went
+    // completely unnoticed: the elapsed timer kept counting up as if all was
+    // well and the take was quietly empty.
+    this.recorder.onerror = (event: Event) => {
+      const err = (event as unknown as { error?: Error }).error;
+      this.recorderError = err ?? new Error("Recording stopped unexpectedly.");
+      console.error("inkboard: MediaRecorder error", this.recorderError);
+    };
+    this.recorder.start(TIMESLICE_MS);
+  }
+
+  /** True once start() has been called and stop() has not consumed it yet. */
+  get active(): boolean {
+    return this.recorder !== null;
   }
 
   async stop(): Promise<void> {
     const recorder = this.recorder;
     if (!recorder) throw new Error("not recording");
 
-    const stopped = new Promise<void>((resolve) => {
-      recorder.onstop = () => resolve();
-    });
-    recorder.stop();
-    await stopped;
+    // When every track ends (webcam unplugged, USB reset) the recorder moves
+    // to "inactive" on its own. Calling stop() on it then throws
+    // InvalidStateError and the onstop promise never settles, so the take
+    // hung forever and the chunks already buffered were thrown away. Only
+    // wait for onstop if there is actually something to stop.
+    if (recorder.state !== "inactive") {
+      const stopped = new Promise<void>((resolve) => {
+        recorder.onstop = () => resolve();
+      });
+      try {
+        recorder.stop();
+        await stopped;
+      } catch (err) {
+        // Salvage whatever was captured rather than losing the take.
+        console.error("inkboard: recorder.stop() failed, saving buffered chunks", err);
+      }
+    }
+
+    this.recorder = null;
+
+    if (this.chunks.length === 0) {
+      throw this.recorderError ?? new Error("Nothing was recorded.");
+    }
 
     // Tag the blob with what was actually recorded, not a hardcoded guess:
     // on Safari these chunks are MP4, and mislabelling them as WebM would

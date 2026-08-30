@@ -32,6 +32,9 @@ importers:
       '@inkboard/shared-schema':
         specifier: workspace:*
         version: link:../../packages/shared-schema
+      '@tldraw/assets':
+        specifier: 3.15.6
+        version: 3.15.6
       katex:
         specifier: ^0.16.11
         version: 0.16.47
@@ -2284,6 +2287,9 @@ packages:
 
   '@tiptap/starter-kit@2.27.2':
     resolution: {integrity: sha512-bb0gJvPoDuyRUQ/iuN52j1//EtWWttw+RXAv1uJxfR0uKf8X7uAqzaOOgwjknoCIDC97+1YHwpGdnRjpDkOBxw==}
+
+  '@tldraw/assets@3.15.6':
+    resolution: {integrity: sha512-iFjD0Ttc6CY5YR8l0E6anKEC0SnWkEbir9SxmDs411+TtytcCOwqF0uGMzFxrq2MPc8ezEO9ULGg9HfR0w3zJQ==}
 
   '@tldraw/editor@3.15.6':
     resolution: {integrity: sha512-avchuWHkX4zR/tkuzwgefr3bkATf/BZYyAJtp3OA+tqWkmqd5+AQkJi9jfEbauvy3ZIjljuejHGUUPWt3kS7yA==}
@@ -6578,6 +6584,10 @@ snapshots:
       '@tiptap/extension-text': 2.27.2(@tiptap/core@2.27.2(@tiptap/pm@2.27.2))
       '@tiptap/extension-text-style': 2.27.2(@tiptap/core@2.27.2(@tiptap/pm@2.27.2))
       '@tiptap/pm': 2.27.2
+
+  '@tldraw/assets@3.15.6':
+    dependencies:
+      '@tldraw/utils': 3.15.6
 
   '@tldraw/editor@3.15.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:

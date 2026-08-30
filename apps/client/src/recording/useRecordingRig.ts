@@ -1,18 +1,32 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MediaRecorderCapture } from "../av/MediaRecorderCapture";
 import { startSyncLoop } from "./syncManager";
 
 export interface PreflightState {
   pencilReady: boolean;
   cameraReady: boolean;
+  /** True while the mic is picking up sound right now: a live level light. */
   micActive: boolean;
+  /**
+   * True once the mic has produced *any* sound since it was acquired, and
+   * latched from then on. `micActive` alone used to gate the record button,
+   * which meant REC enabled and disabled itself as the operator spoke and
+   * paused: the button could go dead under the cursor mid-click, and on a
+   * Linux box whose default input is a muted or wrong device it never
+   * enabled at all, with nothing on screen explaining why.
+   */
+  micReady: boolean;
   serverConnected: boolean;
   diskOk: boolean;
 }
 
 export interface RecordingRig {
+  /** True on the device that owns the camera and mic (the laptop mirror). */
+  capture: boolean;
   stream: MediaStream | null;
   cameraError: string | null;
+  /** Re-runs camera/mic acquisition after a failure the operator has fixed. */
+  retryCamera: () => void;
   /** Non-null when the last take failed to encrypt or queue and was lost. */
   saveError: string | null;
   preflight: PreflightState;
@@ -38,6 +52,29 @@ const MIC_ACTIVE_RMS_THRESHOLD = 0.02;
 const MIC_ACTIVE_HOLD_MS = 2000;
 // Purely informational in the checklist, so a slow cadence is plenty.
 const SERVER_PROBE_INTERVAL_MS = 5000;
+
+/**
+ * Turns a getUserMedia rejection into something a human can act on.
+ *
+ * The old handler was `String(err)`, which rendered
+ * "NotReadableError: Could not start video source" in a 160px-wide box and
+ * offered no hint that the fix is to close whatever else is using the camera.
+ */
+export function describeMediaError(err: unknown): string {
+  const name = err instanceof Error ? err.name : "";
+  switch (name) {
+    case "NotAllowedError":
+      return "Permission denied. Allow camera and microphone for this site, then click Retry.";
+    case "NotFoundError":
+      return "No camera or microphone found. Plug one in, then click Retry.";
+    case "NotReadableError":
+      return "Another app is using the camera. Close Zoom/Meet/OBS, then click Retry.";
+    case "OverconstrainedError":
+      return "No device matches the requested settings.";
+    default:
+      return err instanceof Error ? err.message : String(err);
+  }
+}
 
 /**
  * Owns the camera/mic stream and every signal the pre-flight checklist
@@ -66,6 +103,10 @@ export function useRecordingRig(
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [pencilReady, setPencilReady] = useState(false);
   const [micActive, setMicActive] = useState(false);
+  const [micReady, setMicReady] = useState(false);
+  // Bumped to force re-acquisition after the operator fixes whatever broke
+  // (closed the app holding the webcam, granted permission, plugged it in).
+  const [cameraAttempt, setCameraAttempt] = useState(0);
   const [serverConnected, setServerConnected] = useState(false);
   const [diskOk, setDiskOk] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -85,8 +126,57 @@ export function useRecordingRig(
     let cancelled = false;
     let acquired: MediaStream | undefined;
 
-    navigator.mediaDevices
-      .getUserMedia({ video: true, audio: true })
+    // getUserMedia only exists in a secure context. Over plain http on a LAN
+    // IP - easy to hit by opening the Fastify port directly instead of going
+    // through Caddy - `navigator.mediaDevices` is undefined, and reading
+    // .getUserMedia off it threw a synchronous TypeError from inside this
+    // effect. That escapes the promise chain below, so there was nothing to
+    // .catch() it and React unmounted the whole tree: a blank white page with
+    // no message. Say what is actually wrong instead.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError(
+        "Camera and mic need a secure connection. Open this page over https:// " +
+          "(the address the server printed), not http://.",
+      );
+      return;
+    }
+
+    // Audio and video are requested separately and recombined. A single
+    // combined call fails as a unit: if another app holds the webcam (Zoom,
+    // Meet in another tab, OBS, a stale headless Chrome - routine on Linux),
+    // Chrome rejects with NotReadableError and the microphone is denied along
+    // with it even though the mic was free. Acquiring them independently
+    // means a busy camera costs you the camera, not the whole session.
+    const acquire = async (): Promise<MediaStream> => {
+      const [videoResult, audioResult] = await Promise.allSettled([
+        navigator.mediaDevices.getUserMedia({ video: true }),
+        navigator.mediaDevices.getUserMedia({ audio: true }),
+      ]);
+
+      const tracks: MediaStreamTrack[] = [];
+      if (videoResult.status === "fulfilled") tracks.push(...videoResult.value.getTracks());
+      if (audioResult.status === "fulfilled") tracks.push(...audioResult.value.getTracks());
+
+      if (tracks.length === 0) {
+        const reason =
+          videoResult.status === "rejected" ? videoResult.reason : audioResult.status === "rejected" ? audioResult.reason : undefined;
+        throw reason instanceof Error ? reason : new Error("Camera and mic unavailable.");
+      }
+
+      // A partial success is still usable, but say so rather than letting a
+      // silent audio failure look like a working setup that records mute.
+      if (videoResult.status === "rejected") {
+        setCameraError(`Camera unavailable (${describeMediaError(videoResult.reason)}). Recording audio only.`);
+      } else if (audioResult.status === "rejected") {
+        setCameraError(`Microphone unavailable (${describeMediaError(audioResult.reason)}). Recording video only.`);
+      } else {
+        setCameraError(null);
+      }
+
+      return new MediaStream(tracks);
+    };
+
+    acquire()
       .then((got) => {
         if (cancelled) {
           got.getTracks().forEach((track) => track.stop());
@@ -95,13 +185,21 @@ export function useRecordingRig(
         acquired = got;
         setStream(got);
       })
-      .catch((err) => setCameraError(String(err)));
+      .catch((err: unknown) => {
+        if (!cancelled) setCameraError(describeMediaError(err));
+      });
 
     return () => {
       cancelled = true;
       acquired?.getTracks().forEach((track) => track.stop());
     };
-  }, [capture]);
+  }, [capture, cameraAttempt]);
+
+  const retryCamera = useCallback(() => {
+    setCameraError(null);
+    setStream(null);
+    setCameraAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (!stream || stream.getAudioTracks().length === 0) return;
@@ -145,7 +243,12 @@ export function useRecordingRig(
         sumSquares += normalized * normalized;
       }
       const rms = Math.sqrt(sumSquares / data.length);
-      if (rms > MIC_ACTIVE_RMS_THRESHOLD) lastLoudAt = performance.now();
+      if (rms > MIC_ACTIVE_RMS_THRESHOLD) {
+        lastLoudAt = performance.now();
+        // Latched: once the mic has demonstrably worked, it counts as ready
+        // for the rest of the session even during silence. See micReady.
+        setMicReady(true);
+      }
       setMicActive(performance.now() - lastLoudAt < MIC_ACTIVE_HOLD_MS);
       rafId = requestAnimationFrame(tick);
     };
@@ -172,7 +275,14 @@ export function useRecordingRig(
     // to lock the operator out of recording entirely. Confirmed against
     // real hardware: a third-party stylus never fires pointerType "pen".
     const onPointerDown = (event: PointerEvent) => {
-      if (event.pointerType === "pen" || event.pointerType === "touch") {
+      // "mouse" counts too: on the laptop this is only ever an indicator
+      // that some input device has been seen, and leaving it permanently
+      // grey there was misread as a hardware fault.
+      if (
+        event.pointerType === "pen" ||
+        event.pointerType === "touch" ||
+        event.pointerType === "mouse"
+      ) {
         setPencilReady(true);
       }
     };
@@ -244,14 +354,22 @@ export function useRecordingRig(
     pencilReady,
     cameraReady: stream !== null && cameraError === null,
     micActive,
+    micReady,
     serverConnected,
     diskOk,
   };
 
   // Deliberately excludes `serverConnected`: inkboard records with zero
   // network and syncs later. See the doc comment above.
+  //
+  // Also excludes `pencilReady`. That signal is about the *drawing* device,
+  // but this hook only runs its capture half on the laptop, where input is a
+  // mouse or trackpad and the pointerdown listener below never sees "pen" or
+  // "touch". Gating on it meant the record button on the only device that
+  // owns a camera was disabled permanently, with a dim dot and no
+  // explanation. It stays in the checklist as information; it is not a gate.
   const readyToRecord =
-    preflight.pencilReady && preflight.cameraReady && preflight.micActive && preflight.diskOk;
+    preflight.cameraReady && preflight.micReady && preflight.diskOk;
 
   useEffect(() => {
     if (!isRecording) return;
@@ -261,6 +379,19 @@ export function useRecordingRig(
       }
     }, 250);
     return () => clearInterval(interval);
+  }, [isRecording]);
+
+  // A take exists only in this tab until it is stopped, so closing or
+  // reloading mid-recording silently destroys it. Make the browser ask.
+  useEffect(() => {
+    if (!isRecording) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Older browsers require returnValue to be set for the prompt to show.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
   }, [isRecording]);
 
   function toggleRecording() {
@@ -291,12 +422,29 @@ export function useRecordingRig(
       return;
     }
 
-    const capture = new MediaRecorderCapture(stream, crypto.randomUUID());
-    capture.start();
-    captureRef.current = capture;
-    recordingStartedAtRef.current = Date.now();
-    setElapsedMs(0);
-    setIsRecording(true);
+    // Constructing a MediaRecorder, and start() itself, can throw
+    // synchronously: an unsupported mimeType, a stream whose tracks have
+    // already ended, or no MediaRecorder at all. Uncaught, that propagated
+    // straight out of the button's click handler, so the button looked dead
+    // and nothing on screen said why.
+    try {
+      const takeId =
+        typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `take-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const capture = new MediaRecorderCapture(stream, takeId);
+      capture.start();
+      captureRef.current = capture;
+      recordingStartedAtRef.current = Date.now();
+      setElapsedMs(0);
+      setSaveError(null);
+      setIsRecording(true);
+    } catch (err: unknown) {
+      console.error("inkboard: could not start recording", err);
+      setSaveError(
+        err instanceof Error ? err.message : "Could not start recording.",
+      );
+    }
   }
 
   function togglePreview() {
@@ -304,8 +452,10 @@ export function useRecordingRig(
   }
 
   return {
+    capture,
     stream,
     cameraError,
+    retryCamera,
     saveError,
     preflight,
     readyToRecord,

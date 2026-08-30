@@ -2,12 +2,16 @@ import type { PreflightState } from "./useRecordingRig";
 import { glass, status, text } from "../ui/tokens";
 
 // serverConnected is intentionally NOT in this list: it's shown separately
-// below as informational only. Recording is offline-first, none of these
-// four gate REC, only pencil/camera/mic/disk do. See useRecordingRig.ts.
+// below as informational only, because recording is offline-first.
+// Of the four below, camera/mic/disk gate REC; pencilReady is shown for
+// information only (it describes the iPad, not the capture device). See
+// useRecordingRig.ts.
 const ITEMS: Array<[key: keyof PreflightState, label: string]> = [
   ["pencilReady", "Pencil"],
   ["cameraReady", "Camera"],
-  ["micActive", "Mic"],
+  // micReady, not micActive: the dot tracks what actually gates REC, which
+  // is "the mic has worked at least once", not "you are talking right now".
+  ["micReady", "Mic"],
   ["diskOk", "Disk"],
 ];
 

@@ -1,20 +1,14 @@
 import { useEditor, useValue } from "tldraw";
-import { useRecordingContext } from "../recording/RecordingContext";
-import { PreflightChecklist } from "../recording/PreflightChecklist";
 import { accent, glass, text } from "../ui/tokens";
 import {
   ArrowIcon,
   EraserIcon,
-  EyeIcon,
-  EyeOffIcon,
   MathIcon,
   PageIcon,
   PenIcon,
-  RecordIcon,
   RedoIcon,
   SelectIcon,
   ShapeIcon,
-  StopIcon,
   TextIcon,
   UndoIcon,
 } from "./icons";
@@ -57,23 +51,21 @@ const dividerStyle: React.CSSProperties = {
   background: glass.divider,
 };
 
-function formatElapsed(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
-}
-
 /**
- * Icon-only toolbar, minimal premium chrome replacing default tldraw UI
- * (see BoardCanvas.tsx's `components` override). Tooltips carry the label
+ * Icon-only drawing toolbar, minimal premium chrome replacing default tldraw
+ * UI (see BoardCanvas.tsx's `components` override). Tooltips carry the label
  * text via `title` so nothing is lost for accessibility/discoverability;
  * the visual surface stays quiet on purpose.
+ *
+ * Drawing tools only. The record button, pre-flight row and camera preview
+ * toggle used to live here, but this component is only rendered for the
+ * editor role (the mirror sets `Toolbar: null`), and the editor is the iPad,
+ * which never holds the camera. They now live in RecordingControls, rendered
+ * from AppShell on the capture device.
  */
 export function AppToolbar() {
   const editor = useEditor();
   const currentToolId = useValue("current tool", () => editor.getCurrentToolId(), [editor]);
-  const rig = useRecordingContext();
 
   function nextOrNewPage() {
     const pages = editor.getPages();
@@ -99,38 +91,18 @@ export function AppToolbar() {
         alignItems: "center",
         gap: 10,
         touchAction: "manipulation",
+        // tldraw's own chrome lives inside `.tlui-layout`, which sets
+        // `pointer-events: none` so that clicks fall through to the canvas,
+        // and re-enables `pointer-events: all` on each of its UI elements
+        // individually. This toolbar is injected into that same tree via
+        // `components.Toolbar` but never re-enabled them, so it inherited
+        // `none`: every button here was painted correctly and was completely
+        // inert. `document.elementFromPoint()` over the Pen button returned
+        // `.tl-background`, and neither a real mouse click nor a real touch
+        // tap could change tools, undo, redo or add a page on the iPad.
+        pointerEvents: "auto",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          background: glass.surface,
-          backdropFilter: glass.blur,
-          padding: "6px 14px",
-          borderRadius: 999,
-          border: `1px solid ${glass.border}`,
-        }}
-      >
-        <PreflightChecklist preflight={rig.preflight} pendingSyncCount={rig.pendingSyncCount} />
-        {rig.isRecording && (
-          <>
-            <span style={{ width: 1, height: 12, background: glass.divider }} />
-            <span
-              style={{
-                fontFamily: "ui-monospace, monospace",
-                fontSize: 12,
-                color: accent.record,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {formatElapsed(rig.elapsedMs)}
-            </span>
-          </>
-        )}
-      </div>
-
       <div
         style={{
           display: "flex",
@@ -181,36 +153,6 @@ export function AppToolbar() {
           onClick={nextOrNewPage}
         >
           <PageIcon width={19} height={19} />
-        </button>
-        <button
-          title={rig.previewVisible ? "Hide camera preview" : "Show camera preview"}
-          aria-label={rig.previewVisible ? "Hide camera preview" : "Show camera preview"}
-          style={iconButtonStyle(rig.previewVisible)}
-          onClick={rig.togglePreview}
-        >
-          {rig.previewVisible ? (
-            <EyeIcon width={19} height={19} />
-          ) : (
-            <EyeOffIcon width={19} height={19} />
-          )}
-        </button>
-
-        <div style={dividerStyle} />
-
-        <button
-          title={rig.isRecording ? "Stop recording" : "Start recording"}
-          aria-label={rig.isRecording ? "Stop recording" : "Start recording"}
-          style={{
-            ...iconButtonStyle(),
-            color: rig.isRecording ? text.active : accent.record,
-            background: rig.isRecording ? accent.record : "transparent",
-            opacity: !rig.isRecording && !rig.readyToRecord ? 0.35 : 1,
-            cursor: !rig.isRecording && !rig.readyToRecord ? "not-allowed" : "pointer",
-          }}
-          disabled={!rig.isRecording && !rig.readyToRecord}
-          onClick={rig.toggleRecording}
-        >
-          {rig.isRecording ? <StopIcon width={16} height={16} /> : <RecordIcon width={16} height={16} />}
         </button>
       </div>
     </div>

@@ -2,6 +2,8 @@ import { lazy, Suspense } from "react";
 import { PairingGate } from "../pairing/PairingGate";
 import { CameraPreview } from "../av/CameraPreview";
 import { RecordingProvider, useRecordingContext } from "../recording/RecordingContext";
+import { RecordingControls } from "../recording/RecordingControls";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 // The tldraw editor (plus katex, react-dom internals it pulls in) is the
 // bulk of the client bundle. An unpaired device shouldn't have to download
@@ -19,7 +21,10 @@ function AppShell() {
       <Suspense fallback={<div style={{ padding: 24 }}>Loading board…</div>}>
         <BoardCanvas />
       </Suspense>
-      {rig.previewVisible && (
+      {/* Rendered here, not inside the tldraw toolbar, so the capture device
+          has recording controls even though the mirror renders no toolbar. */}
+      <RecordingControls />
+      {rig.previewVisible && rig.capture && (
         <div style={{ position: "fixed", top: 12, right: 12, zIndex: 1000 }}>
           <CameraPreview stream={rig.stream} error={rig.cameraError} />
         </div>
@@ -52,10 +57,15 @@ function AppShell() {
 
 export function App() {
   return (
-    <PairingGate>
-      <RecordingProvider>
-        <AppShell />
-      </RecordingProvider>
-    </PairingGate>
+    // Without this, any render-time throw (a missing secure context, a bad
+    // board record) unmounted the whole React root and left a blank white
+    // page with nothing written to the screen at all.
+    <ErrorBoundary>
+      <PairingGate>
+        <RecordingProvider>
+          <AppShell />
+        </RecordingProvider>
+      </PairingGate>
+    </ErrorBoundary>
   );
 }

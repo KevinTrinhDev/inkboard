@@ -7,6 +7,14 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
     />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- iOS prefers this over the manifest icons for "Add to Home Screen".
+         Without it (and with the manifest icons 404ing, which they did) the
+         home-screen tile was a screenshot of the page instead of an icon. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="inkboard" />
+    <meta name="theme-color" content="#101012" />
     <title>inkboard</title>
     <style>
       /* overflow/overscroll here stop Safari's own page bounce/scroll from
