@@ -88,7 +88,18 @@ export class MediaRecorderCapture {
     return this.recorder !== null;
   }
 
-  async stop(): Promise<void> {
+  /**
+   * Finishes the take, encrypts it and queues it for upload.
+   *
+   * Resolves with null when the take is clean, or with a human-readable
+   * warning when it was saved but is known to be incomplete. Throwing on a
+   * partial take would be worse than returning one: the chunks are real
+   * footage and discarding them helps nobody. Staying silent would be worse
+   * still, which is what used to happen: if the encoder failed after the
+   * first timeslice, `recorderError` was set and then dropped on the floor,
+   * so a truncated take was reported to the operator as a clean save.
+   */
+  async stop(): Promise<string | null> {
     const recorder = this.recorder;
     if (!recorder) throw new Error("not recording");
 
@@ -125,5 +136,9 @@ export class MediaRecorderCapture {
     const key = await getOrCreateRecordingKey();
     const encrypted = await encryptBlob(key, blob);
     await enqueueUpload(this.sessionId, encrypted);
+
+    return this.recorderError
+      ? `Recording was saved but is incomplete: ${this.recorderError.message}`
+      : null;
   }
 }

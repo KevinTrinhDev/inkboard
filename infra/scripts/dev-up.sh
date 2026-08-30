@@ -74,7 +74,11 @@ fi
 # previous run keeps UDP 443 (its HTTP/3 listener) even when TCP looks free,
 # and the resulting error ("listen udp :443: bind: address already in use")
 # arrives buried in JSON logs after a full build.
-for spec in "tcp 443" "udp 443" "tcp ${SERVER_PORT}"; do
+# Port 80 is in the list because Caddy always binds it for the HTTP->HTTPS
+# redirect. Leaving it out meant a busy port 80 was only discovered after the
+# whole build had run and Fastify was already up, at which point Caddy exited
+# on bind failure.
+for spec in "tcp 443" "udp 443" "tcp 80" "tcp ${SERVER_PORT}"; do
   proto="${spec% *}"
   port="${spec#* }"
   flag="-tln"
@@ -94,7 +98,27 @@ done
 # as long as the server runs. Uses the live LAN IP rather than a hard-coded
 # one so it keeps working across DHCP changes.
 # ---------------------------------------------------------------------------
+# Every PID the trap may need, declared and trapped before anything at all is
+# backgrounded. The trap used to be installed after the mDNS publisher had
+# already been started, so any failure in between (the build, the source hash,
+# the server never coming up) left an orphaned avahi-publish still advertising
+# inkboard.local for a server that was no longer running. A name that resolves
+# to nothing is worse than a name that does not resolve.
+SERVER_PID=""
+CADDY_PID=""
 MDNS_PID=""
+cleanup() {
+  # Kill the whole process group, not just the direct child. `pnpm` spawns
+  # tsx which spawns node, and the listening socket belongs to that
+  # grandchild: killing only $SERVER_PID left node holding the port, so the
+  # next run died with EADDRINUSE while this script carried on to Caddy and
+  # served a padlock in front of nothing.
+  [ -n "$SERVER_PID" ] && kill -- "-$SERVER_PID" 2>/dev/null || true
+  [ -n "$CADDY_PID" ] && kill "$CADDY_PID" 2>/dev/null || true
+  [ -n "$MDNS_PID" ] && kill -- "-$MDNS_PID" 2>/dev/null || kill "$MDNS_PID" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
 if [[ "$CADDY_DOMAIN" == *.local ]]; then
   if command -v avahi-publish >/dev/null 2>&1; then
     # Published in a supervising loop rather than once. avahi-publish binds
@@ -128,20 +152,6 @@ if [[ "$CADDY_DOMAIN" == *.local ]]; then
     echo "  Until then, use https://${CADDY_LAN_IP} on the iPad instead." >&2
   fi
 fi
-
-SERVER_PID=""
-CADDY_PID=""
-cleanup() {
-  # Kill the whole process group, not just the direct child. `pnpm` spawns
-  # tsx which spawns node, and the listening socket belongs to that
-  # grandchild: killing only $SERVER_PID left node holding the port, so the
-  # next run died with EADDRINUSE while this script carried on to Caddy and
-  # served a padlock in front of nothing.
-  [ -n "$SERVER_PID" ] && kill -- "-$SERVER_PID" 2>/dev/null || true
-  [ -n "$CADDY_PID" ] && kill "$CADDY_PID" 2>/dev/null || true
-  [ -n "$MDNS_PID" ] && kill -- "-$MDNS_PID" 2>/dev/null || kill "$MDNS_PID" 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
 
 # ---------------------------------------------------------------------------
 # Build only when something actually changed. This used to rebuild the whole
@@ -187,9 +197,11 @@ set +m
 # bare `sleep 1` could not tell a slow start from a dead one, so a server
 # that died on EADDRINUSE looked identical to one still booting.
 echo -n "Waiting for the server"
+SERVER_UP=0
 for _ in $(seq 1 60); do
   if curl -sf "http://127.0.0.1:${SERVER_PORT}/healthz" >/dev/null 2>&1; then
     echo " ok"
+    SERVER_UP=1
     break
   fi
   if ! kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -201,6 +213,17 @@ for _ in $(seq 1 60); do
   echo -n "."
   sleep 0.25
 done
+
+# Falling through this loop used to start Caddy anyway. A server that is alive
+# but wedged then got a working TLS front door in front of it, so systemd
+# reported the unit active, the padlock appeared on the iPad, and every request
+# 502'd. Failing here instead lets Restart=always do its job.
+if [ "$SERVER_UP" -ne 1 ]; then
+  echo ""
+  echo "Server did not answer /healthz within 15s, so inkboard is not starting." >&2
+  echo "  Logs:  journalctl --user -u inkboard -n 50" >&2
+  exit 1
+fi
 
 echo "Starting Caddy (Ctrl+C to stop everything)..."
 XDG_DATA_HOME="$REPO_ROOT/infra/caddy/data" caddy run \

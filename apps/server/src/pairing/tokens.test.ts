@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -285,5 +285,19 @@ describe("session persistence across restarts", () => {
   it("tolerates a corrupt store rather than refusing to start", () => {
     writeFileSync(storePath, "{not json");
     expect(() => initSessionStore(storePath)).not.toThrow();
+  });
+
+  it("keeps the store private even if a stale temp file was world-readable", () => {
+    // writeFileSync's `mode` only applies when it creates the file, so a
+    // leftover permissive temp file from an earlier run would carry its own
+    // mode straight through the rename and publish the session nonces to
+    // every local user. persistSessions() chmods explicitly to prevent that.
+    writeFileSync(`${storePath}.${process.pid}.tmp`, "stale", { mode: 0o644 });
+    chmodSync(`${storePath}.${process.pid}.tmp`, 0o644);
+
+    initSessionStore(storePath);
+    generateSessionCredential();
+
+    expect(statSync(storePath).mode & 0o777).toBe(0o600);
   });
 });

@@ -394,6 +394,27 @@ export function useRecordingRig(
     return () => window.removeEventListener("beforeunload", warn);
   }, [isRecording]);
 
+  // beforeunload only covers closing the tab. A take is also lost if this
+  // component unmounts while the page stays open, which is not hypothetical:
+  // the sync loop calls forgetToken() when the server rejects a credential,
+  // and that unmounts RecordingProvider mid-recording. The camera tracks were
+  // stopped by the effect above, but nothing ever encrypted or queued what
+  // had been captured, so the take was simply gone. Empty deps on purpose:
+  // this must run on unmount only, never on a re-render.
+  useEffect(() => {
+    return () => {
+      const capture = captureRef.current;
+      if (!capture?.active) return;
+      captureRef.current = null;
+      // Fire and forget: unmount cannot await. stop() encrypts and writes to
+      // IndexedDB, and the queued take is picked up by the sync loop on the
+      // next mount, so finishing after this component is gone is fine.
+      void capture.stop().catch((err: unknown) => {
+        console.error("inkboard: could not save the take on unmount", err);
+      });
+    };
+  }, []);
+
   function toggleRecording() {
     if (!stream || !pairingToken) return;
 
@@ -405,8 +426,12 @@ export function useRecordingRig(
       // stop, so a lost recording looked exactly like a saved one.
       void captureRef.current
         ?.stop()
-        .then(() => {
-          setSaveError(null);
+        .then((warning) => {
+          // A non-null warning means the take was saved but is known to be
+          // truncated (the encoder died partway). Surfacing it in the same
+          // place as a save failure is deliberate: silently accepting a
+          // half-length lesson is the outcome worth avoiding.
+          setSaveError(warning);
           syncRef.current?.flushNow();
         })
         .catch((err: unknown) => {

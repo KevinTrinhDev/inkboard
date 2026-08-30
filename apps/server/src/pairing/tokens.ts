@@ -1,5 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname } from "node:path";
 
 /**
@@ -130,8 +137,16 @@ function persistSessions(): void {
     // Write-then-rename so a crash mid-write cannot leave a truncated file
     // that would un-pair every device on the next boot. Same pattern as
     // BoardState.
-    const tmp = `${sessionStorePath}.tmp`;
+    //
+    // The temp name carries the pid so two processes sharing a RECORDINGS_DIR
+    // cannot rename each other's half-written file into place. chmod is
+    // explicit because writeFileSync's `mode` applies only when it creates the
+    // file: a leftover world-readable temp file from an earlier run would
+    // otherwise keep its permissions straight through the rename, publishing
+    // the session nonce registry to every local user.
+    const tmp = `${sessionStorePath}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(payload), { mode: 0o600 });
+    chmodSync(tmp, 0o600);
     renameSync(tmp, sessionStorePath);
   } catch {
     // Persistence is an optimization, never a reason to fail a pairing.
