@@ -1,4 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 /**
  * Short-lived, HMAC-signed pairing tokens. A device that presents a valid,
@@ -20,9 +22,10 @@ export interface PairingToken {
 export interface SessionCredential {
   sessionNonce: string;
   issuedAt: number;
-  // Only the credential stamped with the current generation is valid; see
-  // currentGeneration below. Every new pairing invalidates every credential
-  // minted before it, so at most one device is ever trusted at a time.
+  // Only a credential stamped with the current epoch is valid. The epoch
+  // changes only on an explicit revokeAllSessions(), so pairing a second
+  // device does NOT evict the first: the iPad and the laptop mirror are both
+  // expected to hold a live credential at the same time.
   generation: number;
 }
 
@@ -45,10 +48,15 @@ const consumedNonces = new Map<string, number>();
 //  - `activeSessions` holds the nonce of every live credential, capped, so a
 //    forgotten device cannot accumulate credentials without bound and the
 //    oldest is evicted first.
-//  - Both live in memory only, so a restart still invalidates everything, as
-//    PAIRING_TOKEN_SECRET has no persistence guarantee either.
+//  - Both are mirrored to disk by initSessionStore(), so a restart no longer
+//    silently un-pairs every device. See the note on initSessionStore below.
 // See docs/SECURITY.md.
 let currentEpoch = Date.now();
+
+// Where the session store is mirrored to disk. Null until initSessionStore()
+// names a path, which keeps tests (and app.inject()) purely in-memory unless
+// they opt in.
+let sessionStorePath: string | null = null;
 
 /**
  * Cap on simultaneously paired devices. Two is the real use case (iPad plus
@@ -59,6 +67,83 @@ export const MAX_ACTIVE_SESSIONS = 4;
 
 /** sessionNonce -> issuedAt, for every credential currently considered live. */
 const activeSessions = new Map<string, number>();
+
+interface PersistedSessions {
+  epoch: number;
+  sessions: Array<[string, number]>;
+}
+
+/**
+ * Mirrors the session store to disk so pairing survives a server restart.
+ *
+ * Previously `currentEpoch` and `activeSessions` lived only in memory, so
+ * every restart silently invalidated every credential and both devices had to
+ * be re-paired from a QR code. That reduced the deliberate 30-day credential
+ * TTL (SESSION_TTL_MS) to "until the next Ctrl+C", and it is the single
+ * biggest reason starting a session took a dozen steps instead of one.
+ *
+ * The secret this is all keyed on (PAIRING_TOKEN_SECRET) already lives on
+ * disk in .env, so persisting the far less sensitive nonce list alongside it
+ * does not weaken the threat model. revokeAllSessions() remains the explicit
+ * "kick every device" control.
+ */
+export function initSessionStore(filePath: string): void {
+  sessionStorePath = filePath;
+  if (!existsSync(filePath)) return;
+
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(filePath, "utf8"));
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      typeof (parsed as PersistedSessions).epoch !== "number" ||
+      !Array.isArray((parsed as PersistedSessions).sessions)
+    ) {
+      return;
+    }
+    const data = parsed as PersistedSessions;
+    currentEpoch = data.epoch;
+    activeSessions.clear();
+    const now = Date.now();
+    for (const entry of data.sessions) {
+      if (!Array.isArray(entry) || entry.length !== 2) continue;
+      const [nonce, issuedAt] = entry;
+      if (typeof nonce !== "string" || typeof issuedAt !== "number") continue;
+      // Do not resurrect a credential that expired while the server was down.
+      if (now - issuedAt > SESSION_TTL_MS) continue;
+      activeSessions.set(nonce, issuedAt);
+    }
+  } catch {
+    // A corrupt store is non-fatal: it only means the devices re-pair once,
+    // which is strictly better than refusing to boot.
+  }
+}
+
+function persistSessions(): void {
+  if (!sessionStorePath) return;
+  const payload: PersistedSessions = {
+    epoch: currentEpoch,
+    sessions: [...activeSessions],
+  };
+  try {
+    mkdirSync(dirname(sessionStorePath), { recursive: true });
+    // Write-then-rename so a crash mid-write cannot leave a truncated file
+    // that would un-pair every device on the next boot. Same pattern as
+    // BoardState.
+    const tmp = `${sessionStorePath}.tmp`;
+    writeFileSync(tmp, JSON.stringify(payload), { mode: 0o600 });
+    renameSync(tmp, sessionStorePath);
+  } catch {
+    // Persistence is an optimization, never a reason to fail a pairing.
+  }
+}
+
+/** Test seam: forget the on-disk mirror without touching live sessions. */
+export function resetSessionStoreForTests(): void {
+  sessionStorePath = null;
+  activeSessions.clear();
+  currentEpoch = Date.now();
+}
 
 function evictExpiredSessions(now: number): void {
   for (const [nonce, issuedAt] of activeSessions) {
@@ -73,6 +158,7 @@ function evictExpiredSessions(now: number): void {
 export function revokeAllSessions(): void {
   activeSessions.clear();
   currentEpoch = Date.now() + 1;
+  persistSessions();
 }
 
 /** Number of devices currently holding a valid credential. */
@@ -154,9 +240,10 @@ export function verifyPairingToken(token: string): boolean {
  * docs/SECURITY.md "Offline recording"), so pairing no longer hands back the
  * pairing token itself as the credential.
  *
- * Every call bumps currentGeneration first, so this both mints a fresh
- * credential and implicitly revokes every credential minted before it in
- * the same step. There is no separate revocation list to maintain.
+ * Each call mints an independent credential and records its nonce in
+ * activeSessions, up to MAX_ACTIVE_SESSIONS. Minting does NOT revoke earlier
+ * credentials: the iPad and the laptop mirror must both stay paired. Use
+ * revokeAllSessions() to kick every device.
  */
 export function generateSessionCredential(): string {
   const now = Date.now();
@@ -180,6 +267,7 @@ export function generateSessionCredential(): string {
 
   const sessionNonce = randomBytes(16).toString("hex");
   activeSessions.set(sessionNonce, now);
+  persistSessions();
 
   const credential: SessionCredential = {
     sessionNonce,

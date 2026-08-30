@@ -7,11 +7,13 @@ import fastifyRateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import fastifyWebsocket from "@fastify/websocket";
 import { pairingRoutes } from "./pairing/pairingRoutes.js";
+import { initSessionStore } from "./pairing/tokens.js";
 import { registerBoardSync } from "./ws/boardSync.js";
 import { BoardState, defaultBoardStatePath } from "./ws/boardState.js";
 import { registerUploadRoute } from "./recording/uploadRoute.js";
 import { registerSchemaRoute } from "./http/schemaRoute.js";
 import { registerAssetRoutes } from "./http/assetRoutes.js";
+import { resolveRecordingsDir } from "./paths.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -41,6 +43,12 @@ export interface BuildAppOptions {
   boardStatePath?: string;
   /** Where pasted image/video assets are stored. Overridden in tests. */
   assetsDir?: string;
+  /**
+   * Where paired-device credentials are mirrored so pairing survives a
+   * restart. Omit (the default in tests) to keep the session store purely
+   * in memory.
+   */
+  sessionStorePath?: string;
 }
 
 /**
@@ -51,7 +59,7 @@ export async function buildApp(
   options: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
   const clientDist = options.clientDist ?? join(__dirname, "../../client/dist");
-  const recordingsDir = process.env.RECORDINGS_DIR ?? "./apps/server/recordings";
+  const recordingsDir = resolveRecordingsDir();
   const boardStatePath = options.boardStatePath ?? defaultBoardStatePath(recordingsDir);
   const assetsDir = options.assetsDir ?? join(recordingsDir, "assets");
   const app = Fastify({
@@ -94,6 +102,9 @@ export async function buildApp(
 
   await app.register(fastifyWebsocket);
   await app.register(fastifyStatic, { root: clientDist });
+
+  // Load persisted device pairings before any route can verify a credential.
+  if (options.sessionStorePath) initSessionStore(options.sessionStorePath);
 
   await app.register(pairingRoutes);
   const board = new BoardState(boardStatePath);

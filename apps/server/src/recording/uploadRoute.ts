@@ -4,6 +4,7 @@ import { join, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { FastifyInstance } from "fastify";
 import { verifySessionCredential } from "../pairing/tokens.js";
+import { resolveRecordingsDir } from "../paths.js";
 
 // Defense in depth alongside Caddy's own `request_body { max_size }`: this
 // route can also be hit directly against the Fastify port during local
@@ -17,7 +18,9 @@ const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024; // 2GB, matches Caddyfile
  * Live WebRTC capture is M1: see docs/ROADMAP.md.
  */
 export async function registerUploadRoute(app: FastifyInstance) {
-  const recordingsDir = resolve(process.env.RECORDINGS_DIR ?? "./recordings");
+  // Resolved through paths.ts so this agrees with app.ts; the two used to
+  // default to different directories relative to cwd.
+  const recordingsDir = resolve(resolveRecordingsDir());
   await mkdir(recordingsDir, { recursive: true });
 
   // MediaRecorder blobs arrive as video/webm (or similar), not JSON/text.

@@ -63,7 +63,7 @@ inbound port forwarding.
 - **Several devices can be paired at once, up to a fixed cap, enforced
   server-side.** The two-device setup is the normal case: the iPad holds the
   pen and the laptop shows the mirror, so both need a live credential at the
-  same time. Each credential is tracked individually against an in-memory
+  same time. Each credential is tracked individually against an
   epoch (`tokens.ts`'s `activeSessions` map plus `currentEpoch`), capped at
   `MAX_ACTIVE_SESSIONS`. Pairing beyond the cap evicts the least recently
   paired device rather than refusing, because being locked out of your own
@@ -72,10 +72,25 @@ inbound port forwarding.
   - `revokeAllSessions()` invalidates every outstanding credential in one
     call. It bumps the epoch as well as clearing the map, so a credential
     cannot be revived even if its nonce were somehow replayed.
-  - Restarting the server invalidates every existing credential, since both
-    the epoch and the map are in-memory. Every device must re-pair after a
-    server restart. This is intentional: `PAIRING_TOKEN_SECRET` itself has no
-    persistence guarantee across restarts either.
+  - **Pairing survives a server restart.** The epoch and the nonce map are
+    mirrored to `sessions.json` next to the board state (written 0600, via
+    `initSessionStore()`), so stopping and starting the server does not
+    un-pair your devices.
+
+    This used to be the opposite, and was documented as intentional on the
+    grounds that `PAIRING_TOKEN_SECRET` had no persistence guarantee either.
+    That reasoning did not hold: the secret lives in `.env` on disk and is
+    stable across restarts, so the only thing the in-memory store actually
+    achieved was silently reducing a deliberate 30-day credential to a
+    per-process one. Worse, it combined with a second bug to make the product
+    unusable: exactly one pairing token was minted per boot and consumed
+    single-use, so the iPad burned it, the laptop could not pair, and
+    restarting to get a second QR invalidated the iPad. Only one device could
+    ever be paired at a time. Both halves are fixed and pinned by tests in
+    `tokens.test.ts` ("session persistence across restarts").
+  - To deliberately forget every device, start with `pnpm go --pair` (or
+    `node dist/index.js --pair`). That calls `revokeAllSessions()` and prints
+    a fresh QR, and is now the supported way to add or replace a device.
   - If a device has an offline recording still queued for upload when it gets
     evicted by the cap, that queued upload will 401. Re-pair that device and
     the queued upload retries on its own.

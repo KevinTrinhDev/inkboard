@@ -1,11 +1,16 @@
 import { createHmac } from "node:crypto";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   activeSessionCount,
   consumePairingNonce,
   generatePairingToken,
   generateSessionCredential,
+  initSessionStore,
   MAX_ACTIVE_SESSIONS,
+  resetSessionStoreForTests,
   revokeAllSessions,
   verifyPairingToken,
   verifySessionCredential,
@@ -212,5 +217,73 @@ describe("multi-device sessions", () => {
     const tampered = { ...decoded, generation: decoded.generation + 1 };
     const tamperedB64 = Buffer.from(JSON.stringify(tampered)).toString("base64url");
     expect(verifySessionCredential(`${prefix}.${tamperedB64}.${signature}`)).toBe(false);
+  });
+});
+
+describe("session persistence across restarts", () => {
+  // The two-device setup used to be impossible to complete. Exactly one
+  // pairing token was minted at boot, and /api/pair consumes a nonce
+  // single-use, so whichever device scanned first burned it. The only way to
+  // get another QR was to restart the server, and a restart wiped the
+  // in-memory session store, un-pairing the device that had just succeeded.
+  // These tests pin both halves of the fix.
+  let storePath: string;
+
+  beforeEach(() => {
+    storePath = join(mkdtempSync(join(tmpdir(), "inkboard-sessions-")), "sessions.json");
+    resetSessionStoreForTests();
+  });
+
+  it("mints an independent token per device, so both devices can pair", () => {
+    const iPadToken = generatePairingToken();
+    const laptopToken = generatePairingToken();
+    expect(iPadToken).not.toBe(laptopToken);
+
+    // The iPad pairs first and burns its own nonce...
+    expect(consumePairingNonce(iPadToken)).toBe(true);
+    // ...which must not invalidate the laptop's separate token.
+    expect(consumePairingNonce(laptopToken)).toBe(true);
+  });
+
+  it("keeps a credential valid after the process restarts", () => {
+    initSessionStore(storePath);
+    const credential = generateSessionCredential();
+    expect(verifySessionCredential(credential)).toBe(true);
+
+    // Simulate a restart: drop all in-memory state, then reload from disk.
+    resetSessionStoreForTests();
+    expect(verifySessionCredential(credential)).toBe(false);
+
+    initSessionStore(storePath);
+    expect(verifySessionCredential(credential)).toBe(true);
+  });
+
+  it("keeps both devices paired across a restart", () => {
+    initSessionStore(storePath);
+    const iPad = generateSessionCredential();
+    const laptop = generateSessionCredential();
+
+    resetSessionStoreForTests();
+    initSessionStore(storePath);
+
+    expect(verifySessionCredential(iPad)).toBe(true);
+    expect(verifySessionCredential(laptop)).toBe(true);
+    expect(activeSessionCount()).toBe(2);
+  });
+
+  it("still honours an explicit revoke across a restart", () => {
+    initSessionStore(storePath);
+    const credential = generateSessionCredential();
+    revokeAllSessions();
+
+    resetSessionStoreForTests();
+    initSessionStore(storePath);
+
+    expect(verifySessionCredential(credential)).toBe(false);
+  });
+
+  it("tolerates a corrupt store rather than refusing to start", () => {
+    writeFileSync(storePath, "{not json");
+    expect(() => initSessionStore(storePath)).not.toThrow();
   });
 });
