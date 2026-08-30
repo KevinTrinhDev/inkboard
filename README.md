@@ -39,9 +39,8 @@ redrawn at any size or style later without ever touching a video frame.
 <div align="center">
 <img src="docs/media/laptop-mirror.png" alt="The laptop mirror: the same board live and read-only, with the camera preview, the pre-flight row and the record button" width="760" />
 
-<sub><i>The laptop, watching the same board live while it records. The green
-rectangle top-right is the camera preview showing a test video source, not a
-real webcam.</i></sub>
+<sub><i>The laptop, watching the same board live while it records. The camera
+preview is blanked in this screenshot.</i></sub>
 </div>
 
 ## Quickstart
@@ -62,27 +61,36 @@ laptop's camera view for you.
 
 Then pair each device **once**, from the links it prints:
 
-- **iPad** — scan the QR with the Camera app. First time only, you also
-  install the local certificate: open `https://inkboard.local/inkboard-ca.crt`,
-  continue past the warning (it *is* the cert you're about to trust), install
-  the profile under **Settings → General → VPN & Device Management**, then
-  turn it on under **Settings → General → About → Certificate Trust
-  Settings**. That last toggle is separate and easy to miss. Then open
-  `https://inkboard.local` and add it to your Home Screen.
+- **iPad** — scan the QR with the Camera app, then add the page to your Home
+  Screen. The first time, you also trust the certificate once (below).
 - **Laptop** — the browser opens on its own, already on the pairing link.
 
-**Pairing is remembered.** Every session after that is just:
+**Pairing is remembered.** Every session after that is just `pnpm go`, then
+tap the Home Screen icon and start drawing.
 
-```bash
-pnpm go
-```
+<details>
+<summary><b>First time on the iPad: trusting the certificate</b></summary>
 
-…then tap the Home Screen icon on the iPad and start drawing. Use
-`pnpm go --pair` when you actually want to add or replace a device.
+<br />
 
-> If `inkboard.local` doesn't resolve, the server also serves your LAN IP
-> directly over HTTPS and prints it. Prefer the name: a hard-coded IP goes
-> stale the moment DHCP moves the machine.
+inkboard serves real HTTPS from your own machine, so the iPad has to be told
+once that your machine's certificate authority is trustworthy.
+
+1. Open `https://inkboard.local/inkboard-ca.crt` in Safari and continue past
+   the warning. It *is* the certificate you are about to trust.
+2. Install the downloaded profile under **Settings → General → VPN & Device
+   Management**.
+3. Turn it on under **Settings → General → About → Certificate Trust
+   Settings**.
+
+Step 3 is a separate toggle from step 2 and is the one people miss. Without
+it Safari still refuses the connection.
+
+If `inkboard.local` doesn't resolve, the server also serves your LAN IP over
+HTTPS and prints it. Prefer the name: a hard-coded IP goes stale the moment
+DHCP moves the machine.
+
+</details>
 
 ## How it works
 
@@ -118,13 +126,12 @@ flowchart LR
   tldraw's icons and fonts are bundled into the build rather than fetched
   from its CDN, so the app works with the internet unplugged.
 
-A status pill in the top-left of both devices says whether they are actually
-talking to each other (`Live`, `Connecting`, `Reconnecting`) and how many
-devices are connected. If a device sleeps or WiFi drops it reconnects on its
-own and is handed the current board, so nothing is lost.
-
-To put an image on the board, paste or drop it on either device. It uploads to
-the server once and appears on the other device.
+- **It tells you when it's connected.** A status pill on both devices reads
+  `Live`, `Connecting` or `Reconnecting`, and counts the devices on the board.
+  One that sleeps or loses WiFi reconnects on its own and is handed the
+  current board, so nothing is lost.
+- **Images work too.** Paste or drop one on either device. It uploads once and
+  appears on the other.
 
 Full write-up: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (design decisions)
 and [docs/SECURITY.md](docs/SECURITY.md) (the full threat model).
