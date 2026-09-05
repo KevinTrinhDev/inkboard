@@ -1,5 +1,14 @@
 # Scaling & hardening backlog
 
+> **Status (2026-09):** superseded as the *planning* document.
+> [ROADMAP.md](./ROADMAP.md) is now the sequential plan, and
+> [IMPLEMENTATION-PLAN.md](./IMPLEMENTATION-PLAN.md) the task list;
+> [REVIEW.md](./REVIEW.md) records the findings that motivated both
+> (including several bugs that were already fixed on the unmerged
+> `polish-and-onboarding` branch — merge that branch first, see Phase 0).
+> This file stays open as the idea vault: cross-cutting improvements that are
+> not yet committed to a phase, roughly ordered by impact vs. effort.
+
 [ROADMAP.md](./ROADMAP.md) is the sequential build plan (M0 → M5). This doc is the
 cross-cutting list of improvements layered on top of it: things worth doing to make
 inkboard faster, safer, more useful, and nicer to use, roughly ordered by impact vs. effort.
