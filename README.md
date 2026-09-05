@@ -59,6 +59,9 @@ The camera preview is rendered with a test feed here.</i></sub>
   arrows with the sketchy look of a marker on a board.
 - **Colour and weight** — pick ink colour and width for what you draw or the
   shapes you select.
+- **Make the page yours** — each page can have a paper colour (paper, cream,
+  mint, sky) and a guide pattern (plain, dot grid, ruled lines). The choice
+  syncs to the other device like any board change.
 - **Several pages per lesson** — flip back and forth and rename them
   (tap the page name in the toolbar).
 - **Export your notes** — PNG of the current page, or hold the export button
@@ -147,6 +150,20 @@ once that your machine's certificate authority is trustworthy.
 If `inkboard.local` doesn't resolve, the server also serves your LAN IP over
 HTTPS and prints it. Prefer the name: a hard-coded IP goes stale the moment
 DHCP moves the machine.
+
+</details>
+
+<details>
+<summary><b>Why is there a "made with tldraw" watermark?</b></summary>
+
+<br />
+
+inkboard is built on the [tldraw](https://tldraw.dev) SDK, whose license is
+free for development but shows a small watermark in production unless you
+carry a tldraw license key (free 100-day trial or a commercial key). Set
+`VITE_TLDRAW_LICENSE_KEY` in `.env` to remove it. Everything else in this
+project is MIT or OFL; see [LICENSE](LICENSE) and
+[docs/REVIEW.md](docs/REVIEW.md) §5.1 for the details.
 
 </details>
 

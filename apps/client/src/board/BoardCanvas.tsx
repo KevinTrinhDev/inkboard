@@ -1,7 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
-import { Tldraw, type Editor, type TLComponents } from "tldraw";
+import { Tldraw, useValue, type Editor, type TLComponents } from "tldraw";
 import { getAssetUrlsByMetaUrl } from "@tldraw/assets/urls";
 import "tldraw/tldraw.css";
+import {
+  backgroundFromMeta,
+  backgroundStyleSheet,
+} from "./boardBackground";
 import { TextShapeUtil } from "./shapes/TextShapeUtil";
 import { MathShapeUtil } from "./shapes/MathShapeUtil";
 import { ArrowShapeUtil } from "./shapes/ArrowShapeUtil";
@@ -13,6 +17,13 @@ import { syncRoleFromLocation } from "./syncRole";
 import { useBoardSync } from "./useBoardSync";
 import { SyncStatusPill } from "./SyncStatusPill";
 import { useForgetPairingToken, usePairingToken } from "../pairing/PairingGate";
+
+// Optional: removes the "made with tldraw" watermark. Set in .env:
+//   VITE_TLDRAW_LICENSE_KEY=<your trial/commercial key>
+// Free, non-commercial use without a key keeps the watermark (see REVIEW
+// §5.1 for the exact license terms; 4.x+ enforces the key in production).
+const tldrawLicenseKey =
+  (import.meta.env.VITE_TLDRAW_LICENSE_KEY as string | undefined) || undefined;
 
 // Ink strokes use tldraw's native `draw` shape/tool directly: that's the
 // path that has to feel instant under any pen (Apple Pencil, a generic
@@ -78,6 +89,15 @@ export function BoardCanvas() {
   const assets = useMemo(() => createAssetStore(() => token), [token]);
   const { status, peers, takeOver } = useBoardSync(editor, token, role, forgetToken);
 
+  // Current page's chosen background (tone + guide pattern), reactive to
+  // page switches and to edits from either device (it lives in page meta,
+  // which syncs like every other record).
+  const background = useValue(
+    "page background",
+    () => backgroundFromMeta(editor?.getCurrentPage()?.meta),
+    [editor],
+  );
+
   const handleMount = useCallback(
     (mounted: Editor) => {
       // There is no readonly prop on the component in tldraw 3.x; instance
@@ -121,13 +141,19 @@ export function BoardCanvas() {
     // tldraw instead of intercepting them as page pan/zoom, without also
     // risking WebKit's touch-action:none-suppresses-tap-to-click quirk on
     // the toolbar buttons that sit outside this element. See index.html.
-    <div style={{ position: "fixed", inset: 0, touchAction: "none" }}>
+    <div
+      style={{ position: "fixed", inset: 0, touchAction: "none" }}
+      data-ink-tone={background.tone}
+      data-ink-pattern={background.pattern}
+    >
+      <style dangerouslySetInnerHTML={{ __html: backgroundStyleSheet() }} />
       <Tldraw
         shapeUtils={shapeUtils}
         tools={tools}
         components={role === "mirror" ? mirrorComponents : editorComponents}
         assetUrls={assetUrls}
         assets={assets}
+        licenseKey={tldrawLicenseKey}
         onMount={handleMount}
       />
       <div

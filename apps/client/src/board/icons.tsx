@@ -176,3 +176,14 @@ export function PaintIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function SwatchIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="3" width="7" height="7" rx="2" />
+      <rect x="14" y="3" width="7" height="7" rx="2" fill="currentColor" stroke="none" opacity={0.5} />
+      <rect x="3" y="14" width="7" height="7" rx="2" fill="currentColor" stroke="none" opacity={0.5} />
+      <rect x="14" y="14" width="7" height="7" rx="2" />
+    </svg>
+  );
+}

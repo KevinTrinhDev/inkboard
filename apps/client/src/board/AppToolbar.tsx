@@ -8,6 +8,13 @@ import {
   GeoShapeGeoStyle,
 } from "@tldraw/tlschema";
 import { accent, glass, text } from "../ui/tokens";
+import {
+  META_KEY as BG_META_KEY,
+  TONES,
+  backgroundFromMeta,
+  type BoardPattern,
+  type BoardTone,
+} from "./boardBackground";
 import { exportBoardPdf, exportCurrentPagePng } from "./export";
 import {
   ArrowIcon,
@@ -21,6 +28,7 @@ import {
   RedoIcon,
   SelectIcon,
   ShapeIcon,
+  SwatchIcon,
   TextIcon,
   UndoIcon,
 } from "./icons";
@@ -119,6 +127,7 @@ export function AppToolbar() {
 
   // Style + rename + export popovers.
   const [styleOpen, setStyleOpen] = useState(false);
+  const [bgOpen, setBgOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const renameInputRef = useRef<HTMLInputElement | null>(null);
@@ -203,6 +212,20 @@ export function AppToolbar() {
     else editor.setStyleForNextShapes(DefaultSizeStyle, size);
     setStyleOpen(false);
   }
+
+  /** Writes the page background choice into the page's synced meta. */
+  function applyBackground(next: { tone?: BoardTone; pattern?: BoardPattern }) {
+    const page = editor.getCurrentPage();
+    if (!page) return;
+    const cur = backgroundFromMeta(page.meta);
+    const bg = { tone: next.tone ?? cur.tone, pattern: next.pattern ?? cur.pattern };
+    editor.updatePage({
+      id: page.id,
+      meta: { ...(page.meta ?? {}), [BG_META_KEY]: bg },
+    });
+    setBgOpen(false);
+  }
+  const currentBg = backgroundFromMeta(editor.getCurrentPage()?.meta);
 
   async function runExport(kind: "png" | "pdf") {
     try {
@@ -298,6 +321,60 @@ export function AppToolbar() {
         </div>
       )}
 
+      {bgOpen && (
+        <div style={popoverStyle}>
+          {(Object.keys(TONES) as BoardTone[]).map((tone) => (
+            <button
+              key={tone}
+              title={`${tone} background`}
+              aria-label={`${tone} background`}
+              onClick={() => applyBackground({ tone })}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 8,
+                border:
+                  currentBg.tone === tone
+                    ? "2px solid #5b8dff"
+                    : "2px solid rgba(255,255,255,0.25)",
+                background: TONES[tone],
+                cursor: "pointer",
+                touchAction: "manipulation",
+              }}
+            />
+          ))}
+          <div style={dividerStyle} />
+          {(["none", "dots", "lines"] as BoardPattern[]).map((pattern) => (
+            <button
+              key={pattern}
+              title={pattern === "none" ? "Plain paper" : `${pattern} guide`}
+              aria-label={`${pattern} pattern`}
+              onClick={() => applyBackground({ pattern })}
+              style={{
+                height: 28,
+                minWidth: 44,
+                padding: "0 10px",
+                borderRadius: 8,
+                border:
+                  currentBg.pattern === pattern
+                    ? "1.5px solid #5b8dff"
+                    : "1px solid rgba(255,255,255,0.2)",
+                background: "transparent",
+                color: "#fff",
+                font: "600 11px system-ui, sans-serif",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                touchAction: "manipulation",
+              }}
+            >
+              {pattern}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div
         style={{
           display: "flex",
@@ -339,9 +416,24 @@ export function AppToolbar() {
           title={selectedCount > 0 ? "Style selected shapes" : "Ink colour / width"}
           aria-label="Ink colour and width"
           style={iconButtonStyle(styleOpen)}
-          onClick={() => setStyleOpen((open) => !open)}
+          onClick={() => {
+            setStyleOpen((open) => !open);
+            setBgOpen(false);
+          }}
         >
           <PaintIcon width={19} height={19} />
+        </button>
+
+        <button
+          title={`Page background (${currentBg.tone}${currentBg.pattern !== "none" ? ", " + currentBg.pattern : ""})`}
+          aria-label="Page background"
+          style={iconButtonStyle(bgOpen)}
+          onClick={() => {
+            setBgOpen((open) => !open);
+            setStyleOpen(false);
+          }}
+        >
+          <SwatchIcon width={19} height={19} />
         </button>
 
         <button
