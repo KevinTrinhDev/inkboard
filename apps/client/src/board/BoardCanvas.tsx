@@ -37,7 +37,9 @@ const shapeUtils = [TextShapeUtil, MathShapeUtil, ArrowShapeUtil, RoughShapeUtil
 const assetUrls = getAssetUrlsByMetaUrl();
 
 const tools = [
-  createShapeTool("inkboard-text", "inkboard-text"),
+  // The text tool opens straight into editing: pencil-first flow is tap the
+  // tool, tap the board, type (see TextShapeUtil).
+  createShapeTool("inkboard-text", "inkboard-text", { autoEdit: true }),
   createShapeTool("inkboard-math", "inkboard-math"),
   createShapeTool("inkboard-arrow", "inkboard-arrow"),
   createShapeTool("inkboard-shape", "inkboard-shape"),
