@@ -15,8 +15,14 @@ import { SyncStatusPill } from "./SyncStatusPill";
 import { useForgetPairingToken, usePairingToken } from "../pairing/PairingGate";
 
 // Ink strokes use tldraw's native `draw` shape/tool directly: that's the
-// path that has to feel instant under an Apple Pencil, so it deliberately
-// carries no custom logic. See docs/ARCHITECTURE.md "Canvas engine".
+// path that has to feel instant under any pen (Apple Pencil, a generic
+// stylus, or a finger), so it deliberately carries no custom logic. See
+// docs/ARCHITECTURE.md "Canvas engine".
+//
+// Arrow and shapes are tldraw's native `arrow`/`geo`/`line` tools (full drag
+// interactions). ArrowShapeUtil/RoughShapeUtil stay registered only so board
+// records created by the old M0 stub tools still render; the toolbar no
+// longer creates them.
 const shapeUtils = [TextShapeUtil, MathShapeUtil, ArrowShapeUtil, RoughShapeUtil];
 
 /**
@@ -40,9 +46,8 @@ const tools = [
   // The text tool opens straight into editing: pencil-first flow is tap the
   // tool, tap the board, type (see TextShapeUtil).
   createShapeTool("inkboard-text", "inkboard-text", { autoEdit: true }),
-  createShapeTool("inkboard-math", "inkboard-math"),
-  createShapeTool("inkboard-arrow", "inkboard-arrow"),
-  createShapeTool("inkboard-shape", "inkboard-shape"),
+  // Math likewise: tap the tool, tap the board, type LaTeX with live preview.
+  createShapeTool("inkboard-math", "inkboard-math", { autoEdit: true }),
 ];
 
 const editorComponents: TLComponents = {

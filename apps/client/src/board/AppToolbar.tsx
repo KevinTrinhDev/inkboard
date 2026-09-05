@@ -1,4 +1,12 @@
+import { useState } from "react";
 import { useEditor, useValue } from "tldraw";
+import {
+  DefaultColorStyle,
+  DefaultDashStyle,
+  DefaultFillStyle,
+  DefaultSizeStyle,
+  GeoShapeGeoStyle,
+} from "@tldraw/tlschema";
 import { accent, glass, text } from "../ui/tokens";
 import {
   ArrowIcon,
@@ -13,15 +21,21 @@ import {
   UndoIcon,
 } from "./icons";
 
+// Native tldraw tools get full, battle-tested drag interactions for free.
+// 'arrow' is tldraw's own arrow (drag from tail to head, arrowhead, optional
+// label); shapes use tldraw's 'geo' tool with the dash style set to 'draw'
+// for a hand-drawn look, with the kind selected by the Shape button below.
 const TOOLS: Array<[id: string, label: string, Icon: typeof SelectIcon]> = [
   ["select", "Select", SelectIcon],
   ["draw", "Pen", PenIcon],
   ["eraser", "Eraser", EraserIcon],
   ["inkboard-text", "Text", TextIcon],
   ["inkboard-math", "Math", MathIcon],
-  ["inkboard-arrow", "Arrow", ArrowIcon],
-  ["inkboard-shape", "Shape", ShapeIcon],
+  ["arrow", "Arrow", ArrowIcon],
 ];
+
+type ShapeKind = "rectangle" | "ellipse" | "line";
+const SHAPE_CYCLE: ShapeKind[] = ["rectangle", "ellipse", "line"];
 
 const iconButtonStyle = (active = false): React.CSSProperties => ({
   width: 40,
@@ -66,6 +80,36 @@ const dividerStyle: React.CSSProperties = {
 export function AppToolbar() {
   const editor = useEditor();
   const currentToolId = useValue("current tool", () => editor.getCurrentToolId(), [editor]);
+
+  // What the Shape button will draw next. Tapping the button cycles
+  // rectangle -> ellipse -> line and immediately arms the matching native
+  // tool ('geo' with the dash style set to 'draw' for a hand-drawn look, or
+  // tldraw's 'line' tool).
+  const [shapeKind, setShapeKind] = useState<ShapeKind>("rectangle");
+  const shapeActive =
+    (shapeKind === "line" && currentToolId === "line") ||
+    (shapeKind !== "line" && currentToolId === "geo");
+
+  function pickShape(kind: ShapeKind) {
+    setShapeKind(kind);
+    // One consistent "teacher marker on a board" look for every shape and
+    // line: dark ink, medium weight, hand-drawn ('draw') edges.
+    editor.setStyleForNextShapes(DefaultColorStyle, "black");
+    editor.setStyleForNextShapes(DefaultSizeStyle, "m");
+    editor.setStyleForNextShapes(DefaultDashStyle, "draw");
+    if (kind === "line") {
+      editor.setCurrentTool("line");
+    } else {
+      editor.setStyleForNextShapes(GeoShapeGeoStyle, kind);
+      editor.setStyleForNextShapes(DefaultFillStyle, "none");
+      editor.setCurrentTool("geo");
+    }
+  }
+
+  function cycleShape() {
+    const index = SHAPE_CYCLE.indexOf(shapeKind);
+    pickShape(SHAPE_CYCLE[(index + 1) % SHAPE_CYCLE.length]!);
+  }
 
   function nextOrNewPage() {
     const pages = editor.getPages();
@@ -127,6 +171,15 @@ export function AppToolbar() {
             <Icon width={19} height={19} />
           </button>
         ))}
+
+        <button
+          title={`Shape (next: ${shapeKind})`}
+          aria-label="Shape (rectangle, ellipse or line)"
+          style={iconButtonStyle(shapeActive)}
+          onClick={cycleShape}
+        >
+          <ShapeIcon width={19} height={19} />
+        </button>
 
         <div style={dividerStyle} />
 

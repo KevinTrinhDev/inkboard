@@ -12,6 +12,7 @@
   "dependencies": {
     "@inkboard/shared-schema": "workspace:*",
     "@tldraw/assets": "3.15.6",
+    "@tldraw/tlschema": "3.15.6",
     "katex": "^0.16.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
