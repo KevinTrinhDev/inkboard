@@ -94,13 +94,62 @@ export function PairingGate({ children }: { children: ReactNode }) {
 
   if (!token) {
     return (
-      <main style={{ padding: 24, fontFamily: "system-ui" }}>
-        <h1>inkboard</h1>
-        <p>Not paired with a server yet.</p>
-        <p>
-          Scan the pairing QR code printed in the server's terminal with the
-          iPad's Camera app, then tap the notification to open this link.
-        </p>
+      <main
+        style={{
+          minHeight: "100%",
+          boxSizing: "border-box",
+          padding: 32,
+          fontFamily: "system-ui, -apple-system, sans-serif",
+          color: "#e8e8ea",
+          background: "#121214",
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ maxWidth: 460 }}>
+          <h1 style={{ fontSize: 26, margin: "0 0 6px" }}>inkboard</h1>
+          <p style={{ opacity: 0.75, margin: "0 0 22px", lineHeight: 1.5 }}>
+            A private teaching board on your own WiFi. One device holds the
+            pen (any tablet or phone — iPad, Android, Samsung, even this
+            laptop's touch screen) and the laptop records the camera view.
+          </p>
+
+          <ol style={{ lineHeight: 1.7, margin: "0 0 20px", paddingLeft: 22 }}>
+            <li>
+              Run the server on the laptop:{" "}
+              <code style={{ fontSize: 13 }}>./infra/scripts/dev-up.sh</code>
+            </li>
+            <li>
+              Point this device&apos;s camera at the QR code printed in the
+              terminal (or open the printed <code>/pair?token=…</code> link).
+            </li>
+            <li>
+              On the laptop open <code>/mirror</code> for the camera + record
+              view, and pair it with its own QR code.
+            </li>
+          </ol>
+
+          <div
+            role="note"
+            style={{
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 10,
+              padding: "10px 14px",
+              fontSize: 13,
+              lineHeight: 1.6,
+              opacity: 0.85,
+            }}
+          >
+            <strong>Not pairing?</strong> The server must be running on the
+            same WiFi, and this device must trust its certificate once (
+            <code style={{ fontSize: 12 }}>/inkboard-ca.crt</code> on the
+            laptop, then Settings → certificate trust on iPad, or the
+            equivalent on Android). The QR token is single-use: restart the
+            server with <code style={{ fontSize: 12 }}>dev-up.sh --pair</code>{" "}
+            for a fresh one.
+          </div>
+        </div>
       </main>
     );
   }

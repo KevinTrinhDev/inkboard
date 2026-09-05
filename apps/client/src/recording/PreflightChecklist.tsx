@@ -3,16 +3,17 @@ import { glass, status, text } from "../ui/tokens";
 
 // serverConnected is intentionally NOT in this list: it's shown separately
 // below as informational only, because recording is offline-first.
-// Of the four below, camera/mic/disk gate REC; pencilReady is shown for
-// information only (it describes the iPad, not the capture device). See
-// useRecordingRig.ts.
-const ITEMS: Array<[key: keyof PreflightState, label: string]> = [
-  ["pencilReady", "Pencil"],
-  ["cameraReady", "Camera"],
+// Of the four below, camera/mic/disk gate REC; penReady is shown for
+// information only (it describes the drawing device, not the capture
+// device). See useRecordingRig.ts.
+const ITEMS: Array<[key: keyof PreflightState, label: string, hint: string]> = [
+  // Any input counts: Apple Pencil, a generic stylus, a finger or a mouse.
+  ["pencilReady", "Pen", "Pen/finger input seen on the board"],
+  ["cameraReady", "Camera", "Camera is live"],
   // micReady, not micActive: the dot tracks what actually gates REC, which
   // is "the mic has worked at least once", not "you are talking right now".
-  ["micReady", "Mic"],
-  ["diskOk", "Disk"],
+  ["micReady", "Mic", "Microphone has picked up sound"],
+  ["diskOk", "Disk", "Enough free space for a take"],
 ];
 
 const dotStyle = (color: string): React.CSSProperties => ({
@@ -50,10 +51,10 @@ export function PreflightChecklist({
         letterSpacing: 0.1,
       }}
     >
-      {ITEMS.map(([key, label]) => {
+      {ITEMS.map(([key, label, hint]) => {
         const ok = preflight[key];
         return (
-          <span key={key} style={itemStyle}>
+          <span key={key} style={itemStyle} title={hint}>
             <span style={dotStyle(ok ? status.ok : status.pending)} />
             <span style={{ color: ok ? text.onDim : text.dim }}>{label}</span>
           </span>
