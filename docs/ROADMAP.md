@@ -59,6 +59,9 @@ make the trunk + docs honest again.
   that encrypts, queues and uploads; the `.webm.enc` lands on the server; a
   server restart does not un-pair either device; `pnpm typecheck && pnpm lint
   && pnpm test && pnpm build` are green on the trunk, locally and in CI.
+  **Automated verification 2026-09: gate ✅, check-sync ✅, stress-sync ✅,
+  HTTPS deploy ✅ (inkboard.local + LAN IP).** The physical-iPad half of this
+  list is tracked in [HARDWARE.md](./HARDWARE.md).
 
 Resolves REVIEW: P0-1…P0-5, P5-1, P5-2, doc drift.
 
