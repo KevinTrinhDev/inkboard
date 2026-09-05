@@ -104,6 +104,13 @@ export function BoardCanvas() {
       mounted.updateInstanceState({ isPenMode: false });
 
       setEditor(mounted);
+
+      // Debug/testing handle: lets Playwright specs and ad-hoc probes drive
+      // the real editor (scripts/screenshots.mjs, future e2e) without
+      // reaching into React internals.
+      (window as unknown as { __inkboard?: { editor: Editor } }).__inkboard = {
+        editor: mounted,
+      };
     },
     [role],
   );

@@ -90,6 +90,11 @@ export class MathShapeUtil extends BaseBoxShapeUtil<MathShape> {
     return <MathShapeBody shape={shape} />;
   }
 
+  /** tldraw only lets shapes edit in place when the util says it can. */
+  override canEdit(): boolean {
+    return true;
+  }
+
   indicator(shape: MathShape) {
     return <rect width={shape.props.w} height={shape.props.h} />;
   }

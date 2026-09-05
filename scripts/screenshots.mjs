@@ -7,7 +7,7 @@
  * /tmp/inkboard-laptop-link.txt (written next to the server log by
  * infra/scripts/dev-up.sh --pair).
  *
- * Board content is authored through window.__inkboard.editor (the same
+ * Board content is authored through globalThis.__inkboard.editor (the same
  * tldraw records the tools create) so the shots are deterministic; the
  * mirror shot uses fake camera devices so the preview and record bar render.
  *
@@ -64,7 +64,7 @@ try {
   const ipad = await browser.newContext({ viewport: { width: 1366, height: 950 } });
   const board = await ipad.newPage();
   await board.goto(`${BASE}${ipadUrl}`);
-  await board.waitForFunction(() => !!window.__inkboard, { timeout: 25000 });
+  await board.waitForFunction(() => !!globalThis.__inkboard, { timeout: 25000 });
   await board.waitForTimeout(1500); // welcome + katex settle
 
   // Handwritten strokes via the real Pen tool (drag = a tldraw draw shape).
@@ -97,7 +97,7 @@ try {
   ];
 
   const errors = await board.evaluate((shapes) => {
-    const editor = window.__inkboard.editor;
+    const editor = globalThis.__inkboard.editor;
     const out = [];
     for (const s of shapes) {
       try {

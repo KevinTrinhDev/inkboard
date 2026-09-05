@@ -48,6 +48,11 @@ export class TextShapeUtil extends BaseBoxShapeUtil<TextShape> {
     return <EditableText shape={shape} />;
   }
 
+  /** tldraw only lets shapes edit in place when the util says it can. */
+  override canEdit(): boolean {
+    return true;
+  }
+
   indicator(shape: TextShape) {
     return <rect width={shape.props.w} height={shape.props.h} />;
   }

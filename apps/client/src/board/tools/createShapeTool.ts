@@ -27,12 +27,15 @@ export function createShapeTool(id: string, shapeType: string, options: ShapeToo
         x: currentPagePoint.x,
         y: currentPagePoint.y,
       });
-      this.editor.setCurrentTool("select");
       if (options.autoEdit) {
-        // Editing is what makes the textarea appear and focus; the shape's
-        // util renders its <textarea> while getEditingShapeId() === shapeId.
+        // Stay on the placement tool and open editing immediately: the flow
+        // is "tap the tool, tap the board, type". Snapping back to select
+        // first lets the select tool's transition clear the editing shape,
+        // so editing is armed *after* the creation instead.
         this.editor.setEditingShape(shapeId);
+        return;
       }
+      this.editor.setCurrentTool("select");
     };
   };
 }
