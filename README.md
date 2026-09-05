@@ -66,6 +66,10 @@ The camera preview is rendered with a test feed here.</i></sub>
   (tap the page name in the toolbar).
 - **Export your notes** — PNG of the current page, or hold the export button
   for a multi-page PDF. Share notes without waiting on a video pipeline.
+- **Get your video out** — after a take, the laptop's **My takes** panel lists
+  it; **Download video** decrypts it locally (the server never holds the key)
+  into the original playable WebM/MP4, ready to watch, edit, or upload to
+  YouTube.
 - **Share the board, not the file** — anything you add shows up on the other
   device instantly; images paste/drop across devices too.
 

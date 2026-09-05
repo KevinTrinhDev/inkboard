@@ -27,6 +27,10 @@ and the CI gate.
       mirror as you draw (latency acceptable, no Safari page-pan).
 - [ ] REC on the laptop: pre-flight dots go green (camera, mic, disk), REC
       starts/stops, timer runs, "waiting to sync" count clears.
+- [ ] **Get the video out:** after a take, "My takes" lists it and
+      **Download video** saves a playable WebM/MP4 (verify it opens in a
+      player) — the posting-to-YouTube path. (Verified end-to-end in the
+      browser with a test camera feed.)
 - [ ] Server restart (`./infra/scripts/dev-up.sh` again) → **no re-pair
       needed**; devices reconnect on their own and receive the board.
 - [ ] iPad sleeps / WiFi drops mid-session → reconnects and receives the
