@@ -212,15 +212,17 @@ describe("board sync hub", () => {
     socket.terminate();
   });
 
-  it("lets a newer editor take over the pen from a stale one", async () => {
+  it("lets the same device's reconnect take over its own stale editor socket", async () => {
+    const credential = freshCredential();
     const first = await app.injectWS("/ws");
-    send(first, { v: V, type: "hello", role: "editor", token: freshCredential() });
+    send(first, { v: V, type: "hello", role: "editor", token: credential });
     await nextMessage(first); // welcome
 
     // A reconnecting iPad usually arrives before the server has noticed its
-    // previous socket died. Refusing it would lock the operator out.
+    // previous socket died. Refusing it would lock the operator out. Same
+    // credential, so this is a reconnect, not a second pen.
     const second = await app.injectWS("/ws");
-    send(second, { v: V, type: "hello", role: "editor", token: freshCredential() });
+    send(second, { v: V, type: "hello", role: "editor", token: credential });
     const welcome = await nextMessage(second);
     expect(welcome.type).toBe("welcome");
 
@@ -233,6 +235,66 @@ describe("board sync hub", () => {
     send(second, { v: V, type: "ping" });
     const pong = await nextMessage(second);
     expect(pong.type).toBe("pong");
+
+    first.terminate();
+    second.terminate();
+  });
+
+  it("refuses a second, genuinely different editor and leaves the incumbent in place", async () => {
+    const first = await app.injectWS("/ws");
+    send(first, { v: V, type: "hello", role: "editor", token: freshCredential() });
+    await nextMessage(first); // welcome
+
+    // A different device (different credential) with no explicit takeover
+    // must not silently steal the pen — that used to make two editors
+    // replace each other forever.
+    const contender = await app.injectWS("/ws");
+    send(contender, { v: V, type: "hello", role: "editor", token: freshCredential() });
+    const err = await nextMessage(contender);
+    expect(err.type).toBe("error");
+    if (err.type !== "error") throw new Error("expected error");
+    expect(err.code).toBe("editor-contended");
+
+    // The incumbent is untouched and still holds the pen.
+    send(first, {
+      v: V,
+      type: "diff",
+      diff: { added: { "shape:still-mine": record("shape:still-mine") }, updated: {}, removed: {} },
+    });
+    send(first, { v: V, type: "ping" });
+    const pong = await nextMessage(first);
+    expect(pong.type).toBe("pong");
+
+    first.terminate();
+    contender.terminate();
+  });
+
+  it("lets a different device take over explicitly with takeover: true", async () => {
+    const first = await app.injectWS("/ws");
+    send(first, { v: V, type: "hello", role: "editor", token: freshCredential() });
+    await nextMessage(first); // welcome
+
+    // Register the "kicked" listener before the takeover hello: the error
+    // frame can arrive while we await the newcomer's welcome, and a message
+    // emitted with no listener attached is dropped.
+    const kickedPromise = nextMessage(first);
+
+    const second = await app.injectWS("/ws");
+    send(second, {
+      v: V,
+      type: "hello",
+      role: "editor",
+      token: freshCredential(),
+      takeover: true,
+    });
+    const welcome = await nextMessage(second);
+    expect(welcome.type).toBe("welcome");
+
+    // The first editor was told it lost the pen.
+    const kicked = await kickedPromise;
+    expect(kicked.type).toBe("error");
+    if (kicked.type !== "error") throw new Error("expected error");
+    expect(kicked.code).toBe("not-an-editor");
 
     first.terminate();
     second.terminate();

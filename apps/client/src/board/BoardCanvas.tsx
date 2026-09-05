@@ -69,7 +69,7 @@ export function BoardCanvas() {
   const role = useMemo(() => syncRoleFromLocation(window.location), []);
 
   const assets = useMemo(() => createAssetStore(() => token), [token]);
-  const { status, peers } = useBoardSync(editor, token, role, forgetToken);
+  const { status, peers, takeOver } = useBoardSync(editor, token, role, forgetToken);
 
   const handleMount = useCallback(
     (mounted: Editor) => {
@@ -127,6 +127,53 @@ export function BoardCanvas() {
       >
         <SyncStatusPill status={status} peers={peers} role={role} />
       </div>
+      {role === "editor" && status === "contended" && (
+        // Another device currently holds the pen and this device was refused
+        // (editor-contended). The pill alone is not enough: the operator
+        // needs to know the board is frozen on this device and what to do
+        // about it.
+        <div
+          role="alert"
+          style={{
+            position: "fixed",
+            top: 12,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1100,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "8px 10px 8px 16px",
+            borderRadius: 999,
+            font: "500 13px/1.2 system-ui, -apple-system, sans-serif",
+            color: "#fff",
+            background: "rgba(30, 27, 75, 0.92)",
+            border: "1px solid rgba(167, 139, 250, 0.4)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.35)",
+            touchAction: "manipulation",
+          }}
+        >
+          <span>Another device holds the pen.</span>
+          <button
+            onClick={takeOver}
+            style={{
+              flexShrink: 0,
+              padding: "7px 14px",
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.35)",
+              background: "rgba(255,255,255,0.16)",
+              color: "#fff",
+              cursor: "pointer",
+              font: "600 12.5px system-ui, sans-serif",
+              touchAction: "manipulation",
+            }}
+          >
+            Use this device
+          </button>
+        </div>
+      )}
     </div>
   );
 }

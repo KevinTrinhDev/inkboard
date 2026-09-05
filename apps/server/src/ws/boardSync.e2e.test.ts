@@ -81,8 +81,14 @@ class TestClient {
     }
   }
 
-  async hello(role: "editor" | "mirror"): Promise<void> {
-    this.send({ v: V, type: "hello", role, token: generateSessionCredential() });
+  /**
+   * Authenticates as `role`. A device that "reconnects" must reuse its own
+   * credential: since the pen-ownership fix, a hello from a *different*
+   * credential while another editor is live is refused (`editor-contended`)
+   * unless it carries an explicit takeover.
+   */
+  async hello(role: "editor" | "mirror", token?: string): Promise<void> {
+    this.send({ v: V, type: "hello", role, token: token ?? generateSessionCredential() });
     const welcome = await this.next();
     if (welcome.type !== "welcome") throw new Error(`expected welcome, got ${welcome.type}`);
   }
@@ -191,8 +197,11 @@ describe("board sync end to end over a real socket", () => {
   });
 
   it("hands a device that reconnects the full board, not a blank one", async () => {
+    // A reconnect is the same device, so it reuses its credential; a fresh
+    // one would be a "second pen" and be refused.
+    const credential = generateSessionCredential();
     const ipad = await TestClient.connect(url);
-    await ipad.hello("editor");
+    await ipad.hello("editor", credential);
 
     ipad.send({
       v: V,
@@ -210,7 +219,7 @@ describe("board sync end to end over a real socket", () => {
     ipad.close();
 
     const returning = await TestClient.connect(url);
-    await returning.hello("editor");
+    await returning.hello("editor", credential);
 
     expect(returning.board["shape:kept"]).toBeDefined();
     returning.close();

@@ -5,12 +5,14 @@ const LABEL: Record<SyncStatus, string> = {
   connecting: "Connecting",
   live: "Live",
   offline: "Reconnecting",
+  contended: "Pen elsewhere",
 };
 
 const DOT: Record<SyncStatus, string> = {
   connecting: "#eab308",
   live: "#22c55e",
   offline: "#ef4444",
+  contended: "#a78bfa",
 };
 
 /**

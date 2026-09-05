@@ -53,6 +53,16 @@ export const ClientHelloSchema = z.object({
   type: z.literal("hello"),
   role: SyncRoleSchema,
   token: z.string().min(1),
+  /**
+   * Explicit, user-confirmed takeover: replace the *current* editor even if
+   * it belongs to a different device. Without this flag a hello from a
+   * different device is refused (`editor-contended`) rather than silently
+   * kicking the live pen, which is what stopped two editors from
+   * ping-ponging forever. A same-credential hello (the same iPad
+   * reconnecting after its socket died) replaces its own stale socket
+   * without needing this flag.
+   */
+  takeover: z.literal(true).optional(),
 });
 
 export const ClientDiffSchema = z.object({
@@ -124,6 +134,10 @@ export const ServerErrorSchema = z.object({
     "too-large",
     "unsupported-version",
     "unauthenticated",
+    // Another device currently holds the pen and the hello did not ask for
+    // an explicit takeover. Sent instead of kicking the incumbent, which is
+    // what previously let two editors replace each other forever.
+    "editor-contended",
   ]),
   message: z.string(),
 });

@@ -175,16 +175,36 @@ export async function registerBoardSync(
         // nothing to converge them: concurrent edits to one shape would leave
         // the two devices permanently disagreeing.
         //
-        // The newest editor takes over rather than being refused. A
-        // reconnecting iPad routinely arrives before the server has noticed
-        // its previous socket died, and refusing it would lock the operator
-        // out of their own board until a heartbeat happened to reap the
-        // zombie.
+        // Takeover is allowed in exactly two cases, so two *different* live
+        // editors cannot replace each other forever:
+        //  1. same credential — a reconnecting iPad routinely arrives before
+        //     the server has noticed its previous socket died; refusing it
+        //     would lock the operator out of their own board until a
+        //     heartbeat happened to reap the zombie. Same device, so the
+        //     stale socket is simply replaced.
+        //  2. explicit `takeover: true` in the hello — the operator looked at
+        //     the "another device has the pen" notice and chose to take
+        //     over. Anything else from a different device is refused with
+        //     `editor-contended` and the incumbent keeps the pen untouched.
         if (message.role === "editor") {
-          for (const other of peers) {
-            if (other === peer || !other.authenticated || other.role !== "editor") {
-              continue;
-            }
+          const otherEditors = [...peers].filter(
+            (p) => p !== peer && p.authenticated && p.role === "editor",
+          );
+          const differentDevice = otherEditors.filter(
+            (o) => o.token !== message.token,
+          );
+          if (differentDevice.length > 0 && message.takeover !== true) {
+            fail(
+              socket,
+              "editor-contended",
+              "another device already holds the pen; set takeover to replace it",
+            );
+            socket.close(4408, "editor contended");
+            return;
+          }
+          // Same-device reconnect(s), and/or a confirmed takeover: replace
+          // the incumbent(s).
+          for (const other of otherEditors) {
             fail(other.socket, "not-an-editor", "another device took over the pen");
             other.socket.close(4409, "replaced by a newer editor");
             peers.delete(other);

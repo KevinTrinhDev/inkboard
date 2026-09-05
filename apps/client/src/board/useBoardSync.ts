@@ -11,7 +11,7 @@ import {
   type SyncRole,
 } from "@inkboard/shared-schema";
 
-export type SyncStatus = "connecting" | "live" | "offline";
+export type SyncStatus = "connecting" | "live" | "offline" | "contended";
 
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 15_000;
@@ -43,7 +43,7 @@ export function useBoardSync(
    * with no way to tell why or to fix it.
    */
   onCredentialInvalid: () => void = () => {},
-): { status: SyncStatus; peers: number } {
+): { status: SyncStatus; peers: number; takeOver: () => void } {
   const [status, setStatus] = useState<SyncStatus>("connecting");
   const [peers, setPeers] = useState(0);
 
@@ -57,6 +57,22 @@ export function useBoardSync(
   roleRef.current = role;
   const onCredentialInvalidRef = useRef(onCredentialInvalid);
   onCredentialInvalidRef.current = onCredentialInvalid;
+
+  /**
+   * True while this device has been told another device holds the pen
+   * (`editor-contended`). While set, a socket close is NOT a transient
+   * disconnect: reconnecting without a takeover flag would just be refused
+   * again, forever.
+   */
+  const contendedRef = useRef(false);
+  /**
+   * Set by the "take over" action; the next hello carries `takeover: true`
+   * and is cleared once the server has welcomed this device.
+   */
+  const takeoverRef = useRef(false);
+  /** Points at the current effect's reconnect trigger, so the returned
+   *  `takeOver()` can reach inside the effect closure. */
+  const requestTakeOverRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!editor || !token) return;
@@ -125,6 +141,9 @@ export function useBoardSync(
           type: "hello",
           role: roleRef.current,
           token: tokenRef.current ?? "",
+          // Only after the operator picked "take over": tells the server to
+          // replace the device that currently holds the pen.
+          ...(takeoverRef.current ? { takeover: true } : {}),
         });
       };
 
@@ -146,6 +165,8 @@ export function useBoardSync(
           case "welcome": {
             reconnectAttempt = 0;
             welcomed = true;
+            contendedRef.current = false;
+            takeoverRef.current = false;
             setStatus("live");
             setPeers(message.peers);
 
@@ -222,6 +243,16 @@ export function useBoardSync(
             if (message.code === "unauthenticated") {
               setStatus("offline");
               onCredentialInvalidRef.current();
+            } else if (
+              message.code === "editor-contended" &&
+              roleRef.current === "editor"
+            ) {
+              // Another device holds the pen and we did not ask to take over.
+              // Stop reconnecting (the server would refuse again) and let the
+              // UI offer an explicit takeover instead.
+              contendedRef.current = true;
+              takeoverRef.current = false;
+              setStatus("contended");
             }
             break;
 
@@ -230,12 +261,20 @@ export function useBoardSync(
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         socket = null;
         welcomed = false;
         if (!disposed) {
-          setStatus("offline");
-          scheduleReconnect();
+          if (contendedRef.current || event.code === 4408) {
+            // 4408 = the server refused this editor because another device
+            // holds the pen. Do not auto-reconnect into an endless
+            // refuse-forever loop; surface the takeover choice instead.
+            contendedRef.current = true;
+            setStatus("contended");
+          } else {
+            setStatus("offline");
+            scheduleReconnect();
+          }
         }
       };
 
@@ -247,6 +286,7 @@ export function useBoardSync(
 
     const scheduleReconnect = () => {
       if (disposed) return;
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
       const delay = Math.min(
         RECONNECT_BASE_MS * 2 ** reconnectAttempt,
         RECONNECT_MAX_MS,
@@ -254,6 +294,29 @@ export function useBoardSync(
       reconnectAttempt += 1;
       reconnectTimer = window.setTimeout(connect, delay);
     };
+
+    /**
+     * User-confirmed "give me the pen": clears the contended state, arms the
+     * takeover flag and forces a reconnect, whose hello then replaces the
+     * other device's editor socket server-side.
+     */
+    const requestTakeOver = () => {
+      contendedRef.current = false;
+      takeoverRef.current = true;
+      reconnectAttempt = 0;
+      if (socket && socket.readyState !== WebSocket.CLOSED) {
+        // The onclose handler sees the cleared contended flag and schedules
+        // the reconnect that carries takeover: true.
+        try {
+          socket.close();
+          return;
+        } catch {
+          // fall through to scheduleReconnect
+        }
+      }
+      scheduleReconnect();
+    };
+    requestTakeOverRef.current = requestTakeOver;
 
     // Only local, document-scope changes go on the wire. store.listen defaults
     // to source 'all', which would echo every diff we just applied from the
@@ -283,5 +346,9 @@ export function useBoardSync(
     // must rebuild the subscription.
   }, [editor, token, role]);
 
-  return { status, peers };
+  return {
+    status,
+    peers,
+    takeOver: () => requestTakeOverRef.current(),
+  };
 }
