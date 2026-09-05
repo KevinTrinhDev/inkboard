@@ -140,3 +140,39 @@ export function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function ChevronLeftIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M14.5 5.5 8 12l6.5 6.5" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9.5 5.5 16 12l-6.5 6.5" />
+    </svg>
+  );
+}
+
+export function DownloadIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 4v10" />
+      <path d="m8 10 4 4 4-4" />
+      <path d="M4 19h16" />
+    </svg>
+  );
+}
+
+export function PaintIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5 3h9l5 5v13H5z" />
+      <path d="M14 3v5h5" />
+      <path d="M8 14c0 1.4-.6 2.2-1.6 2.6" strokeWidth={1.4} />
+    </svg>
+  );
+}
