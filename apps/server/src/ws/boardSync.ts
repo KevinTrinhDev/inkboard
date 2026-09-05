@@ -46,7 +46,13 @@ function send(socket: WebSocket, message: ServerMessage): void {
 
 function fail(
   socket: WebSocket,
-  code: "bad-message" | "not-an-editor" | "too-large" | "unsupported-version" | "unauthenticated",
+  code:
+    | "bad-message"
+    | "not-an-editor"
+    | "too-large"
+    | "unsupported-version"
+    | "unauthenticated"
+    | "editor-contended",
   message: string,
 ): void {
   send(socket, { v: SYNC_PROTOCOL_VERSION, type: "error", code, message });

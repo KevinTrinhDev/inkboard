@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Editor } from "tldraw";
 import {
+  applyRecordsDiff,
   emptyRecordsDiff,
   isEmptyRecordsDiff,
   ServerMessageSchema,
@@ -8,8 +9,10 @@ import {
   SYNC_PROTOCOL_VERSION,
   type ClientMessage,
   type RecordsDiff,
+  type SyncRecord,
   type SyncRole,
 } from "@inkboard/shared-schema";
+import { loadLocalBoardState, saveLocalBoardState } from "./boardPersistence";
 
 export type SyncStatus = "connecting" | "live" | "offline" | "contended";
 
@@ -18,6 +21,13 @@ const RECONNECT_MAX_MS = 15_000;
 
 /** Diffs are coalesced over one frame so a fast stroke is not one send per point. */
 const FLUSH_INTERVAL_MS = 50;
+
+/**
+ * How often the editor's crash-safe local board copy may be written. Offline
+ * strokes only matter if they survive a tab kill, so every edit schedules a
+ * write this debounce later (and a final write happens on page hide).
+ */
+const PERSIST_DEBOUNCE_MS = 700;
 
 function socketUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -73,6 +83,12 @@ export function useBoardSync(
   /** Points at the current effect's reconnect trigger, so the returned
    *  `takeOver()` can reach inside the effect closure. */
   const requestTakeOverRef = useRef<() => void>(() => {});
+  /**
+   * Editor-only: the crash-safe local board is hydrated once per device
+   * mount, not once per effect re-run (re-pairing or role changes must not
+   * reload a stale local snapshot over a live board).
+   */
+  const hydratedRef = useRef(false);
 
   useEffect(() => {
     if (!editor || !token) return;
@@ -89,6 +105,84 @@ export function useBoardSync(
     /** Set once the server has answered hello; nothing is sent before then. */
     let welcomed = false;
     let pending = emptyRecordsDiff();
+
+    // --- Crash-safe local board (editor only, REVIEW P1-2) ---
+    // `serverRecords` is the last board the server is known to hold
+    // (welcome snapshot, folded forward by every diff whose send succeeded).
+    // `pending` is persisted alongside it, so a killed tab offline loses
+    // nothing: on boot the store is seeded with records + pending, and the
+    // pending diff is still re-sent once a connection exists.
+    let serverRecords: Record<string, SyncRecord> | undefined;
+    let serverSchema: Record<string, unknown> | undefined;
+    let persistTimer: number | undefined;
+
+    const persistNow = async () => {
+      if (disposed || serverRecords === undefined) return;
+      await saveLocalBoardState({
+        records: serverRecords,
+        schema: serverSchema,
+        pending,
+      });
+    };
+    const schedulePersist = () => {
+      if (role !== "editor" || serverRecords === undefined) return;
+      if (persistTimer !== undefined) window.clearTimeout(persistTimer);
+      persistTimer = window.setTimeout(() => {
+        persistTimer = undefined;
+        void persistNow();
+      }, PERSIST_DEBOUNCE_MS);
+    };
+    /** A final write when the tab is hidden or closed: the last chance an
+     *  offline stroke has to reach durable storage before a kill. */
+    const persistOnHidden = () => {
+      if (document.visibilityState === "hidden") void persistNow();
+    };
+
+    /**
+     * Seeds the editor's store from the crash-safe local copy so an offline
+     * restart is the board the operator left, not a blank canvas. Runs once
+     * per device mount, before the first connection attempt.
+     */
+    const hydrateLocalBoard = async () => {
+      if (role !== "editor" || hydratedRef.current) return;
+      hydratedRef.current = true;
+      const local = await loadLocalBoardState();
+      const current = editorRef.current;
+      if (!current || disposed || !local) return;
+
+      serverRecords = local.records;
+      serverSchema = local.schema;
+
+      // Edits made in the tiny window between mount and this read resolving
+      // live in `pending` but would be wiped by the snapshot load below.
+      // Fold them in: both are unsent diffs, later writes win per record.
+      const inflight = pending;
+      pending = emptyRecordsDiff();
+      const mergedPending = local.pending;
+      if (!isEmptyRecordsDiff(inflight)) {
+        squashRecordsDiff(mergedPending, inflight);
+      }
+      pending = mergedPending;
+
+      const merged = applyRecordsDiff(local.records, mergedPending);
+      if (Object.keys(merged).length === 0) {
+        schedulePersist();
+        return;
+      }
+
+      applyingRemote = true;
+      try {
+        current.store.mergeRemoteChanges(() => {
+          current.store.loadStoreSnapshot({
+            store: merged as never,
+            schema: (local.schema ?? current.store.schema.serialize()) as never,
+          });
+        });
+      } finally {
+        applyingRemote = false;
+      }
+      schedulePersist();
+    };
 
     /** Returns whether the frame actually reached the socket. */
     const send = (message: ClientMessage): boolean => {
@@ -115,6 +209,12 @@ export function useBoardSync(
       // dropped on the floor, then erased for good by the next snapshot.
       if (send({ v: SYNC_PROTOCOL_VERSION, type: "diff", diff })) {
         pending = emptyRecordsDiff();
+        // The server has now applied `diff`, so the crash-safe copy of the
+        // authoritative board moves forward with it.
+        if (role === "editor") {
+          serverRecords = applyRecordsDiff(serverRecords ?? {}, diff);
+          schedulePersist();
+        }
       }
     };
 
@@ -207,16 +307,31 @@ export function useBoardSync(
                 // of the authoritative board.
                 current.store.applyDiff(carried as never);
               }
+
+              // Remember the authoritative snapshot for the crash-safe copy.
+              if (roleRef.current === "editor") {
+                serverRecords = { ...message.records };
+                serverSchema = message.schema;
+                schedulePersist();
+              }
             } else if (roleRef.current === "editor") {
               // Server has nothing yet: seed it from this device so a mirror
               // joining later sees the existing board rather than a blank one.
               const snapshot = current.store.getStoreSnapshot();
-              send({
+              const sent = send({
                 v: SYNC_PROTOCOL_VERSION,
                 type: "snapshot",
                 records: snapshot.store as never,
                 schema: snapshot.schema as never,
               });
+              if (sent) {
+                serverRecords = {
+                  ...(snapshot.store as unknown as Record<string, SyncRecord>),
+                };
+                serverSchema =
+                  snapshot.schema as unknown as Record<string, unknown> | undefined;
+                schedulePersist();
+              }
             }
             break;
           }
@@ -326,20 +441,38 @@ export function useBoardSync(
         (entry) => {
           if (applyingRemote) return;
           squashRecordsDiff(pending, entry.changes as unknown as RecordsDiff);
+          // Every local edit also nudges the crash-safe copy: offline
+          // strokes must survive a tab kill, not just a reconnect.
+          schedulePersist();
         },
         { source: "user", scope: "document" },
       );
 
       flushTimer = window.setInterval(flush, FLUSH_INTERVAL_MS);
+      document.addEventListener("visibilitychange", persistOnHidden);
+      window.addEventListener("pagehide", persistOnHidden);
     }
 
-    connect();
+    if (role === "editor") {
+      // Seed the store from the crash-safe local board before the first
+      // connection attempt, so a restart with no server is never a blank
+      // canvas and the pending diff is ready to re-send on welcome.
+      void (async () => {
+        await hydrateLocalBoard();
+        if (!disposed) connect();
+      })();
+    } else {
+      connect();
+    }
 
     return () => {
       disposed = true;
       unlisten?.();
       if (flushTimer !== undefined) window.clearInterval(flushTimer);
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      if (persistTimer !== undefined) window.clearTimeout(persistTimer);
+      document.removeEventListener("visibilitychange", persistOnHidden);
+      window.removeEventListener("pagehide", persistOnHidden);
       socket?.close();
     };
     // role is intentionally a dependency: switching between board and mirror
