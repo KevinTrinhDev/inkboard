@@ -1,5 +1,6 @@
 import { EyeIcon, EyeOffIcon, RecordIcon, StopIcon } from "../board/icons";
 import { PreflightChecklist } from "./PreflightChecklist";
+import { MyTakesButton } from "./MyTakes";
 import { useRecordingContext } from "./RecordingContext";
 import { accent, glass, text } from "../ui/tokens";
 
@@ -150,6 +151,10 @@ export function RecordingControls() {
         >
           {rig.previewVisible ? <EyeIcon width={19} height={19} /> : <EyeOffIcon width={19} height={19} />}
         </button>
+
+        <div style={{ width: 1, alignSelf: "stretch", margin: "6px 4px", background: glass.divider }} />
+
+        <MyTakesButton />
 
         <div style={{ width: 1, alignSelf: "stretch", margin: "6px 4px", background: glass.divider }} />
 

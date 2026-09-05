@@ -10,6 +10,9 @@ export interface QueuedUpload {
   sessionId: string;
   createdAt: number;
   blob: Blob;
+  /** The real container of the decrypted take (e.g. video/webm, video/mp4),
+   *  so the recording device can decrypt back into a playable file. */
+  mime: string;
 }
 
 const DB_NAME = "inkboard-upload-queue";
@@ -26,10 +29,14 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function enqueueUpload(sessionId: string, blob: Blob): Promise<void> {
+export async function enqueueUpload(
+  sessionId: string,
+  blob: Blob,
+  mime = "video/webm",
+): Promise<void> {
   const db = await openDb();
   try {
-    const item: QueuedUpload = { sessionId, createdAt: Date.now(), blob };
+    const item: QueuedUpload = { sessionId, createdAt: Date.now(), blob, mime };
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite");
       tx.objectStore(STORE).put(item);

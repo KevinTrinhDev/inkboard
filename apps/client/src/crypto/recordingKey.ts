@@ -91,11 +91,19 @@ export async function encryptBlob(key: CryptoKey, blob: Blob): Promise<Blob> {
   return new Blob([out], { type: "application/octet-stream" });
 }
 
-/** Inverse of {@link encryptBlob}: reads the prepended IV and decrypts the rest. */
-export async function decryptBlob(key: CryptoKey, blob: Blob): Promise<Blob> {
+/**
+ * Inverse of {@link encryptBlob}: reads the prepended IV and decrypts the
+ * rest into a playable blob of the take's real container (WebM on desktop,
+ * MP4 on iPadOS Safari).
+ */
+export async function decryptBlob(
+  key: CryptoKey,
+  blob: Blob,
+  mime = "video/webm",
+): Promise<Blob> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const iv = bytes.slice(0, IV_LENGTH_BYTES);
   const ciphertext = bytes.slice(IV_LENGTH_BYTES);
   const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
-  return new Blob([plaintext], { type: "video/webm" });
+  return new Blob([plaintext], { type: mime });
 }

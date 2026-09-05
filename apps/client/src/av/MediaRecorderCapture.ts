@@ -130,12 +130,13 @@ export class MediaRecorderCapture {
     // Tag the blob with what was actually recorded, not a hardcoded guess:
     // on Safari these chunks are MP4, and mislabelling them as WebM would
     // make the ciphertext undecodable by anything that trusts the type.
-    const blob = new Blob(this.chunks, {
-      type: this.mimeType ?? recorder.mimeType ?? "application/octet-stream",
-    });
+    const mime = this.mimeType ?? recorder.mimeType ?? "video/webm";
+    const blob = new Blob(this.chunks, { type: mime });
     const key = await getOrCreateRecordingKey();
     const encrypted = await encryptBlob(key, blob);
-    await enqueueUpload(this.sessionId, encrypted);
+    // The real container rides with the take so the sidecar on the server
+    // can tell the recording device what format to decrypt back into.
+    await enqueueUpload(this.sessionId, encrypted, mime);
 
     return this.recorderError
       ? `Recording was saved but is incomplete: ${this.recorderError.message}`

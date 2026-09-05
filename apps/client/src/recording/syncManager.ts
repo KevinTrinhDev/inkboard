@@ -30,7 +30,12 @@ export function startSyncLoop(
         try {
           const res = await fetch(`/api/sessions/${item.sessionId}/upload`, {
             method: "POST",
-            headers: { "x-pairing-token": token },
+            headers: {
+              "x-pairing-token": token,
+              // Tells the server the real container so the sidecar and the
+              // later decrypted download keep the correct video format.
+              "x-take-mime": item.mime || "video/webm",
+            },
             body: item.blob,
           });
           if (res.ok) {
